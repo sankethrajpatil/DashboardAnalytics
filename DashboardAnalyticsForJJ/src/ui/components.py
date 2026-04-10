@@ -858,3 +858,240 @@ def _expanded_chart_component() -> rx.Component:
 def risk_owner_card(risk: dict) -> rx.Component:
     """Legacy single risk card — wraps the compact row."""
     return _risk_row(risk)
+
+
+# ═══════════════════════════════════════════════════════════════
+# File Upload Component
+# ═══════════════════════════════════════════════════════════════
+
+def _file_type_badge(file_type: rx.Var[str]) -> rx.Component:
+    """Colored badge indicating file type."""
+    return rx.box(
+        rx.text(file_type, font_size="10px", font_weight="700", color=BG),
+        padding="2px 8px",
+        border_radius=R_PILL,
+        background=rx.cond(
+            file_type == "PDF",
+            RED,
+            rx.cond(file_type == "JSON", AMBER, GREEN),
+        ),
+    )
+
+
+def _uploaded_file_row(file: rx.Var[dict]) -> rx.Component:
+    """Single row in the uploaded files list."""
+    return rx.hstack(
+        _file_type_badge(file["type"]),
+        rx.vstack(
+            rx.text(file["name"], color=T1, font_size="13px", font_weight="500", font_family=FONT),
+            rx.text(file["size"], color=T3, font_size="11px", font_family=FONT),
+            spacing="0",
+        ),
+        rx.spacer(),
+        rx.text(file["timestamp"], color=T4, font_size="11px", font_family=FONT),
+        rx.el.button(
+            rx.icon("x", size=14),
+            on_click=DashboardState.remove_uploaded_file(file["name"]),
+            background="transparent",
+            color=T3,
+            border="none",
+            cursor="pointer",
+            padding="4px",
+            border_radius=R_SM,
+            _hover={"color": RED, "background": "rgba(255,90,95,0.1)"},
+        ),
+        align="center",
+        spacing="3",
+        width="100%",
+        padding="8px 12px",
+        border_radius=R_MD,
+        background=BG_INPUT,
+        border=f"1px solid {BORDER_SUBTLE}",
+        transition=EASE,
+        _hover={"border_color": BORDER},
+    )
+
+
+def file_upload_panel() -> rx.Component:
+    """Upload modal for Excel, JSON, and PDF files."""
+    return rx.cond(
+        DashboardState.show_upload_modal,
+        rx.box(
+            rx.box(
+                rx.vstack(
+                    # ── Header ──
+                    rx.hstack(
+                        rx.hstack(
+                            rx.icon("upload", size=18, color=CYAN),
+                            rx.text("Upload Files", color=T1, font_size="16px",
+                                    font_weight="600", font_family=FONT),
+                            spacing="2", align="center",
+                        ),
+                        rx.spacer(),
+                        rx.el.button(
+                            rx.icon("x", size=16),
+                            on_click=DashboardState.toggle_upload_modal,
+                            background="transparent",
+                            color=T3, border="none", cursor="pointer",
+                            _hover={"color": T1},
+                        ),
+                        width="100%", align="center",
+                    ),
+                    rx.text(
+                        "Drag & drop or click to upload Excel (.xlsx/.xls), JSON, or PDF files.",
+                        color=T3, font_size="12px", font_family=FONT,
+                    ),
+                    # ── Drop zone ──
+                    rx.upload(
+                        rx.vstack(
+                            rx.icon("folder-up", size=36, color=CYAN, opacity="0.7"),
+                            rx.text("Drop files here or click to browse",
+                                    color=T2, font_size="13px", font_family=FONT),
+                            rx.text(".xlsx  ·  .xls  ·  .json  ·  .pdf",
+                                    color=T4, font_size="11px", font_family=FONT),
+                            spacing="2", align="center", justify="center",
+                            padding="2rem",
+                        ),
+                        id="file_upload",
+                        multiple=True,
+                        accept={
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+                            "application/vnd.ms-excel": [".xls"],
+                            "application/json": [".json"],
+                            "application/pdf": [".pdf"],
+                        },
+                        border=f"2px dashed {BORDER}",
+                        border_radius=R_LG,
+                        background=BG_INPUT,
+                        cursor="pointer",
+                        width="100%",
+                        transition=EASE,
+                        _hover={"border_color": CYAN, "background": "rgba(62,231,224,0.04)"},
+                    ),
+                    # ── Upload button ──
+                    rx.hstack(
+                        rx.el.button(
+                            rx.hstack(
+                                rx.icon("upload", size=14),
+                                "Upload Selected",
+                                spacing="2", align="center",
+                            ),
+                            on_click=DashboardState.handle_upload(rx.upload_files(upload_id="file_upload")),
+                            background=CYAN,
+                            color=BG,
+                            border="none",
+                            font_weight="600",
+                            font_size="13px",
+                            font_family=FONT,
+                            padding="8px 20px",
+                            border_radius=R_MD,
+                            cursor="pointer",
+                            transition=EASE,
+                            _hover={"opacity": "0.85", "transform": "translateY(-1px)"},
+                        ),
+                        rx.cond(
+                            DashboardState.uploaded_files.length() > 0,  # type: ignore[attr-defined]
+                            rx.el.button(
+                                rx.hstack(
+                                    rx.icon("trash-2", size=14),
+                                    "Clear All",
+                                    spacing="2", align="center",
+                                ),
+                                on_click=DashboardState.clear_all_uploads,
+                                background="transparent",
+                                color=RED,
+                                border=f"1px solid {RED}",
+                                font_size="12px",
+                                font_family=FONT,
+                                padding="6px 14px",
+                                border_radius=R_MD,
+                                cursor="pointer",
+                                transition=EASE,
+                                _hover={"background": "rgba(255,90,95,0.1)"},
+                            ),
+                            rx.box(),
+                        ),
+                        spacing="3",
+                        width="100%",
+                    ),
+                    # ── Progress bar ──
+                    rx.cond(
+                        DashboardState.is_uploading,
+                        rx.box(
+                            rx.box(
+                                width=DashboardState.upload_progress.to(str) + "%",  # type: ignore[attr-defined]
+                                height="4px",
+                                background=CYAN,
+                                border_radius=R_PILL,
+                                transition="width 300ms ease",
+                            ),
+                            width="100%",
+                            height="4px",
+                            background=BORDER,
+                            border_radius=R_PILL,
+                        ),
+                        rx.box(),
+                    ),
+                    # ── Error message ──
+                    rx.cond(
+                        DashboardState.upload_error != "",
+                        rx.box(
+                            rx.text(DashboardState.upload_error, color=RED,
+                                    font_size="12px", font_family=FONT),
+                            background="rgba(255,90,95,0.08)",
+                            border=f"1px solid {RED}",
+                            border_radius=R_MD,
+                            padding="8px 12px",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    # ── File list ──
+                    rx.cond(
+                        DashboardState.uploaded_files.length() > 0,  # type: ignore[attr-defined]
+                        rx.vstack(
+                            rx.hstack(
+                                rx.text("Uploaded Files", color=T2, font_size="13px",
+                                        font_weight="600", font_family=FONT),
+                                rx.spacer(),
+                                rx.text(
+                                    DashboardState.uploaded_files.length().to(str) + " file(s)",  # type: ignore[attr-defined]
+                                    color=T4, font_size="11px", font_family=FONT,
+                                ),
+                                width="100%", align="center",
+                            ),
+                            rx.vstack(
+                                rx.foreach(DashboardState.uploaded_files, _uploaded_file_row),
+                                spacing="2",
+                                width="100%",
+                                max_height="220px",
+                                overflow_y="auto",
+                            ),
+                            spacing="2",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    spacing="4",
+                    align="stretch",
+                ),
+                background=BG,
+                border=f"1px solid {BORDER}",
+                border_radius=R_LG,
+                padding="24px",
+                width="min(560px, 92vw)",
+                max_height="85vh",
+                overflow_y="auto",
+                box_shadow="0 24px 64px rgba(0,0,0,0.55)",
+            ),
+            position="fixed",
+            inset="0",
+            display="flex",
+            align_items="center",
+            justify_content="center",
+            background="rgba(6,10,18,0.78)",
+            z_index="70",
+            on_click=DashboardState.toggle_upload_modal,
+        ),
+        rx.box(),
+    )

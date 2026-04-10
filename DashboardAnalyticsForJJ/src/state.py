@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,9 @@ from src.agent.graph import (
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+ALLOWED_EXTENSIONS = {".xlsx", ".xls", ".json", ".pdf"}
+UPLOAD_DIR = PROJECT_ROOT / "uploads"
 
 
 class DashboardState(rx.State):
@@ -463,3 +467,82 @@ class DashboardState(rx.State):
 				self.last_action_message = "Daily analytics email draft opened in your default mail client."
 			else:
 				self.chat_error = "; ".join(result.get("errors", ["Unable to send analytics report email."]))
+
+	# ── File Upload ──────────────────────────────────────────────
+
+	uploaded_files: list[dict[str, str]] = []
+	upload_progress: int = 0
+	is_uploading: bool = False
+	upload_error: str = ""
+	show_upload_modal: bool = False
+
+	def toggle_upload_modal(self):
+		self.show_upload_modal = not self.show_upload_modal
+		if not self.show_upload_modal:
+			self.upload_error = ""
+
+	async def handle_upload(self, files: list[rx.UploadFile]):
+		"""Process uploaded files (Excel, JSON, PDF)."""
+		UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+		self.is_uploading = True
+		self.upload_error = ""
+		self.upload_progress = 0
+		yield
+
+		total = len(files)
+		succeeded: list[dict[str, str]] = []
+		errors: list[str] = []
+
+		for idx, file in enumerate(files):
+			filename = file.filename or f"file_{idx}"
+			ext = Path(filename).suffix.lower()
+
+			if ext not in ALLOWED_EXTENSIONS:
+				errors.append(f"{filename}: unsupported type ({ext}). Allowed: .xlsx, .xls, .json, .pdf")
+				continue
+
+			dest = UPLOAD_DIR / filename
+			try:
+				content = await file.read()
+				dest.write_bytes(content)
+				size_kb = len(content) / 1024
+				succeeded.append({
+					"name": filename,
+					"type": ext.lstrip(".").upper(),
+					"size": f"{size_kb:.1f} KB",
+					"path": str(dest),
+					"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+				})
+			except Exception as exc:
+				errors.append(f"{filename}: {exc}")
+
+			self.upload_progress = int(((idx + 1) / total) * 100)
+			yield
+
+		self.uploaded_files = [*self.uploaded_files, *succeeded]
+		self.is_uploading = False
+		self.upload_progress = 100
+
+		if errors:
+			self.upload_error = "; ".join(errors)
+		elif succeeded:
+			self.last_action_message = f"Uploaded {len(succeeded)} file(s) successfully."
+		yield
+
+	def remove_uploaded_file(self, file_name: str):
+		"""Remove a file from the uploaded list and disk."""
+		target = next((f for f in self.uploaded_files if f["name"] == file_name), None)
+		if target:
+			path = Path(target["path"])
+			if path.exists():
+				path.unlink()
+			self.uploaded_files = [f for f in self.uploaded_files if f["name"] != file_name]
+
+	def clear_all_uploads(self):
+		"""Remove all uploaded files from disk and state."""
+		for f in self.uploaded_files:
+			path = Path(f["path"])
+			if path.exists():
+				path.unlink()
+		self.uploaded_files = []
+		self.upload_error = ""
