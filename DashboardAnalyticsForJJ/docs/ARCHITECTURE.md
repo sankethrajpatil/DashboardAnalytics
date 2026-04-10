@@ -42,6 +42,10 @@ This document describes the overall architecture of the Dashboard Analytics plat
 │  │  │ PO_Header +             │  │ Risk IDs, owners, status,      │  │   │
 │  │  │ SpendDetails_JobAid     │  │ severity, dates                 │  │   │
 │  │  └─────────────────────────┘  └─────────────────────────────────┘  │   │
+│  │  ┌─────────────────────────────────────────────────────────────┐   │   │
+│  │  │ User Uploads (src/uploads/)                                 │   │   │
+│  │  │ .xlsx, .xls, .json, .pdf → scrape → Claude column analysis  │   │   │
+│  │  └─────────────────────────────────────────────────────────────┘   │   │
 │  └────────────────────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────────────────────┘
 ```
@@ -70,7 +74,7 @@ This document describes the overall architecture of the Dashboard Analytics plat
 | Module | Responsibility |
 |---|---|
 | `layout.py` | Page composition, navigation rail, title bar, section routing |
-| `components.py` | Reusable widgets: metric cards, chart cards, filter controls, modals |
+| `components.py` | Reusable widgets: metric cards, chart cards, filter controls, file upload modal, column relevance report |
 | `charts.py` | Plotly chart builders (treemap, bar, line, heatmap, histogram) |
 | `chat_panel.py` | Claude chat sidebar with dock/float modes and message history |
 
@@ -79,6 +83,7 @@ This document describes the overall architecture of the Dashboard Analytics plat
 Single `DashboardState` class — the reactive store that connects UI to workflows:
 
 - Holds all UI state (filters, metrics, chart data, chat messages, preferences)
+- Manages file upload lifecycle (upload, scrape, AI analysis, removal)
 - Exposes event handlers that trigger agent workflows
 - Persists user preferences to `.claude/memory/ui_state.json`
 
@@ -93,6 +98,8 @@ Single `DashboardState` class — the reactive store that connects UI to workflo
 | `memory.py` | File-based persistent memory for chat context |
 | `tools.py` | Side-effect tools: PDF export, mailto links |
 | `email.py` | Daily analytics report formatting |
+| `file_scraper.py` | Multi-format file metadata extraction (Excel sheets/columns/dtypes, JSON structure/keys, PDF headings/tables) |
+| `column_analyzer.py` | Claude-powered column relevance classifier — maps uploaded columns to dashboard schema |
 
 > See [AI_ARCHITECTURE.md](AI_ARCHITECTURE.md) for detailed AI workflow diagrams and design decisions.
 
@@ -182,6 +189,6 @@ Single `DashboardState` class — the reactive store that connects UI to workflo
 
 | Integration | Method | Purpose |
 |---|---|---|
-| Anthropic API | REST via `anthropic` SDK | Variance explanations, chat Q&A |
+| Anthropic API | REST via `anthropic` SDK | Variance explanations, chat Q&A, column relevance analysis |
 | Email Client | `webbrowser.open(mailto:...)` | Risk owner follow-up, daily report |
-| File System | Direct read/write | Excel ingestion, PDF export, memory persistence |
+| File System | Direct read/write | Excel ingestion, PDF export, memory persistence, file uploads |
