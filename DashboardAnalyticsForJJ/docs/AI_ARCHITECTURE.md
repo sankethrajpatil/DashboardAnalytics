@@ -10,6 +10,7 @@ The AI layer provides two core capabilities:
 
 1. **Variance Explanations** — CEO-friendly, 2-sentence root-cause analysis triggered on chart hover.
 2. **Interactive Chat** — Multi-turn Q&A about spend trends, risk clusters, and chart interpretation with persistent memory.
+3. **Column Relevance Analysis** — AI-powered classification of uploaded file columns against the dashboard’s SAP-inspired schema.
 
 All AI interactions are orchestrated through **LangGraph** graphs with deterministic node sequencing and explicit input/output contracts.
 
@@ -20,10 +21,11 @@ All AI interactions are orchestrated through **LangGraph** graphs with determini
 | Property | Value |
 |---|---|
 | Provider | Anthropic |
-| Model | `claude-3-5-sonnet-latest` (Claude 3.5 Sonnet) |
+| Model | `claude-sonnet-4-6` (Claude Sonnet) |
 | Temperature | `0` (deterministic) |
 | Max Tokens (Explanations) | 220 |
 | Max Tokens (Chat) | 500 |
+| Max Tokens (Column Analysis) | 4096 |
 | Fallback | Deterministic responses when API key is missing or unavailable |
 
 ### Fallback Strategy
@@ -32,6 +34,7 @@ When `ANTHROPIC_API_KEY` is set to `"YOUR_KEY_HERE"` or the API is unreachable, 
 
 - **Variance explanations** fall back to pre-computed insights derived from `variance_drift` and `concentration_risk` metrics.
 - **Chat responses** return a context summary based on current dashboard state instead of API-generated answers.
+- **Column analysis** falls back to deterministic keyword matching against the known dashboard schema (spend, risk, variance fields).
 
 ---
 
@@ -39,13 +42,15 @@ When `ANTHROPIC_API_KEY` is set to `"YOUR_KEY_HERE"` or the API is unreachable, 
 
 ```
 src/agent/
-├── llm.py          # Anthropic API clients (ClaudeVarianceExplainer, ClaudeChatAssistant)
-├── workflow.py     # LangGraph node implementations (data loading, metrics, charts, explanations)
-├── graph.py        # Graph compilation and workflow runners
-├── chat.py         # Chat-specific workflow nodes
-├── memory.py       # Persistent chat memory (load, save, append)
-├── email.py        # Email report formatting and dispatch
-└── tools.py        # Side-effect tools (mailto, PDF export)
+├── llm.py              # Anthropic API clients (ClaudeVarianceExplainer, ClaudeChatAssistant)
+├── workflow.py         # LangGraph node implementations (data loading, metrics, charts, explanations)
+├── graph.py            # Graph compilation and workflow runners
+├── chat.py             # Chat-specific workflow nodes
+├── memory.py           # Persistent chat memory (load, save, append)
+├── email.py            # Email report formatting and dispatch
+├── tools.py            # Side-effect tools (mailto, PDF export)
+├── file_scraper.py     # Multi-format file metadata extraction (Excel, JSON, PDF)
+└── column_analyzer.py  # Claude-powered column relevance classification
 ```
 
 ---
@@ -115,7 +120,53 @@ The `ClaudeVarianceExplainer` enforces exactly 2 sentences via `_two_sentence_te
 4. Current data context (active filters, metrics, chart summaries)
 5. User query
 
-### 4. Supporting Workflows
+### 4. File Upload & Column Analysis Pipeline
+
+Multi-step pipeline for uploaded file analysis:
+
+```
+User uploads files ──▶ handle_upload()
+                            │
+                   Save to src/uploads/
+                   Validate extensions (.xlsx, .xls, .json, .pdf)
+                            │
+              ┌─────────────▼─────────────┐
+              │   scrape_uploaded_files()  │
+              │                           │
+              │  file_scraper.py:          │
+              │  - Excel: sheets, columns, │
+              │    dtypes, sample values   │
+              │  - JSON: structure, keys,  │
+              │    record counts           │
+              │  - PDF: headings, tables,  │
+              │    page count, word count  │
+              └─────────────┬─────────────┘
+                            │
+              ┌─────────────▼─────────────┐
+              │ analyze_columns_with_claude│
+              │                           │
+              │  column_analyzer.py:       │
+              │  - System prompt with      │
+              │    dashboard schema        │
+              │  - Classify each column:   │
+              │    spend | variance | risk │
+              │    time | identifier |     │
+              │    metadata | irrelevant   │
+              │  - Confidence + reasoning  │
+              │  - Schema mapping          │
+              │  - Recommendation          │
+              └─────────────┬─────────────┘
+                            │
+              Column Relevance Report in UI
+              (color-coded, with stats)
+```
+
+**Known Dashboard Schema** (used for classification context):
+- Spend Header: PO_Number, PO_Status, Business_Sector, Addressable_Flag, PO_Total_Amount, Last_Updated_Timestamp
+- Spend Detail: PO_Number, Sector, Spend_Amount, Variance_vs_Budget, Root_Cause_Code, Last_Updated_Timestamp
+- Risk Register: Risk #, Risk Description, Risk Owner, Risk Status, Risk Category, Risk Level, Risk ERM Type, Open Date, Closed Date
+
+### 5. Supporting Workflows
 
 | Workflow | Nodes | Purpose |
 |---|---|---|

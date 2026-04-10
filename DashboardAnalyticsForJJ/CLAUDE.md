@@ -11,6 +11,9 @@ DashboardAnalyticsForJJ combines enterprise spend data and risk register data in
 
 ## High-Level Goals
 - Load two Excel files: Enterprise_Spend_Jan_2026.xlsx and RiskRegisterSample.xlsx.
+- Support multi-file upload of Excel, JSON, and PDF files with drag-and-drop interface.
+- Scrape uploaded files to extract column names, data types, sample values, and structural metadata.
+- Use Claude AI to classify uploaded columns as relevant or irrelevant against the SAP-inspired dashboard schema.
 - Generate executive summary metrics: Total PO Volume, Average Variance, Active Risk Count, and Addressable Spend %.
 - Generate spend and variance visualizations: Sector Treemap, Root Cause Variance Grouped Horizontal Bar Chart, and Trend & Seasonality Dual-Axis Line and Area Chart.
 - Generate risk visualizations: Risk Heatmap and Aging Risk Histogram.

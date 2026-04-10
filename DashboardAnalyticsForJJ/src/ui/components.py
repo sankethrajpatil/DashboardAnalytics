@@ -858,3 +858,630 @@ def _expanded_chart_component() -> rx.Component:
 def risk_owner_card(risk: dict) -> rx.Component:
     """Legacy single risk card — wraps the compact row."""
     return _risk_row(risk)
+
+
+# ═══════════════════════════════════════════════════════════════
+# File Upload Component
+# ═══════════════════════════════════════════════════════════════
+
+def _file_type_badge(file_type: rx.Var[str]) -> rx.Component:
+    """Colored badge indicating file type."""
+    return rx.box(
+        rx.text(file_type, font_size="10px", font_weight="700", color=BG),
+        padding="2px 8px",
+        border_radius=R_PILL,
+        background=rx.cond(
+            file_type == "PDF",
+            RED,
+            rx.cond(file_type == "JSON", AMBER, GREEN),
+        ),
+    )
+
+
+def _uploaded_file_row(file: rx.Var[dict]) -> rx.Component:
+    """Single row in the uploaded files list."""
+    return rx.hstack(
+        _file_type_badge(file["type"]),
+        rx.vstack(
+            rx.text(file["name"], color=T1, font_size="13px", font_weight="500", font_family=FONT),
+            rx.text(file["size"], color=T3, font_size="11px", font_family=FONT),
+            spacing="0",
+        ),
+        rx.spacer(),
+        rx.text(file["timestamp"], color=T4, font_size="11px", font_family=FONT),
+        rx.el.button(
+            rx.icon("x", size=14),
+            on_click=DashboardState.remove_uploaded_file(file["name"]),
+            background="transparent",
+            color=T3,
+            border="none",
+            cursor="pointer",
+            padding="4px",
+            border_radius=R_SM,
+            _hover={"color": RED, "background": "rgba(255,90,95,0.1)"},
+        ),
+        align="center",
+        spacing="3",
+        width="100%",
+        padding="8px 12px",
+        border_radius=R_MD,
+        background=BG_INPUT,
+        border=f"1px solid {BORDER_SUBTLE}",
+        transition=EASE,
+        _hover={"border_color": BORDER},
+    )
+
+
+def _column_tag(col_name: rx.Var[str]) -> rx.Component:
+    """Small tag for a column name."""
+    return rx.box(
+        rx.text(col_name, font_size="11px", color=CYAN, font_family=FONT),
+        padding="2px 8px",
+        border_radius=R_PILL,
+        background="rgba(62,231,224,0.08)",
+        border=f"1px solid rgba(62,231,224,0.25)",
+        display="inline-block",
+    )
+
+
+def _file_insight_card(insight: rx.Var[dict]) -> rx.Component:
+    """Render a card showing scraped metadata for one file."""
+    return rx.vstack(
+        # Header: type badge + name + summary
+        rx.hstack(
+            _file_type_badge(insight["type"]),
+            rx.text(insight["name"], color=T1, font_size="13px",
+                    font_weight="600", font_family=FONT),
+            spacing="2", align="center",
+        ),
+        rx.text(insight["summary"], color=T2, font_size="12px", font_family=FONT),
+        # Column names
+        rx.cond(
+            insight["column_names"].length() > 0,  # type: ignore[attr-defined]
+            rx.vstack(
+                rx.text("Columns / Fields", color=T3, font_size="11px",
+                        font_weight="600", font_family=FONT, letter_spacing="0.04em"),
+                rx.box(
+                    rx.foreach(insight["column_names"], _column_tag),
+                    display="flex",
+                    flex_wrap="wrap",
+                    gap="6px",
+                ),
+                spacing="2", width="100%",
+            ),
+            rx.box(),
+        ),
+        # Headings (PDF)
+        rx.cond(
+            insight["type"] == "PDF",
+            rx.cond(
+                insight["headings"].length() > 0,  # type: ignore[attr-defined]
+                rx.vstack(
+                    rx.text("Headings Detected", color=T3, font_size="11px",
+                            font_weight="600", font_family=FONT, letter_spacing="0.04em"),
+                    rx.vstack(
+                        rx.foreach(
+                            insight["headings"],
+                            lambda h: rx.text(h, color=T2, font_size="12px", font_family=FONT),
+                        ),
+                        spacing="1", width="100%",
+                        max_height="120px", overflow_y="auto",
+                    ),
+                    spacing="2", width="100%",
+                ),
+                rx.box(),
+            ),
+            rx.box(),
+        ),
+        spacing="3",
+        width="100%",
+        padding="12px 16px",
+        border_radius=R_MD,
+        background=BG_INPUT,
+        border=f"1px solid {BORDER}",
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# Claude Column Relevance Report
+# ═══════════════════════════════════════════════════════════════
+
+_CATEGORY_COLORS = {
+    "spend": GREEN,
+    "variance": PURPLE,
+    "risk": RED,
+    "time": BLUE,
+    "identifier": CYAN,
+    "metadata": AMBER,
+    "irrelevant": T4,
+}
+
+_CATEGORY_ICONS = {
+    "spend": "dollar-sign",
+    "variance": "trending-up",
+    "risk": "shield-alert",
+    "time": "clock",
+    "identifier": "key",
+    "metadata": "tag",
+    "irrelevant": "x-circle",
+}
+
+
+def _category_badge(category: rx.Var[str]) -> rx.Component:
+    """Colored pill for a column category."""
+    return rx.box(
+        rx.text(category, font_size="10px", font_weight="700",
+                text_transform="uppercase", letter_spacing="0.04em"),
+        padding="2px 10px",
+        border_radius=R_PILL,
+        color=BG,
+        background=rx.match(
+            category,
+            ("spend", GREEN),
+            ("variance", PURPLE),
+            ("risk", RED),
+            ("time", BLUE),
+            ("identifier", CYAN),
+            ("metadata", AMBER),
+            ("irrelevant", T4),
+            T3,
+        ),
+    )
+
+
+def _confidence_dot(confidence: rx.Var[str]) -> rx.Component:
+    """Small dot indicating confidence level."""
+    return rx.box(
+        width="8px", height="8px",
+        border_radius="50%",
+        background=rx.match(
+            confidence,
+            ("high", GREEN),
+            ("medium", AMBER),
+            ("low", RED),
+            T4,
+        ),
+        title=confidence,
+    )
+
+
+def _column_relevance_row(col: rx.Var[dict]) -> rx.Component:
+    """Single row in the relevance report."""
+    return rx.hstack(
+        _category_badge(col["category"]),
+        _confidence_dot(col["confidence"]),
+        rx.vstack(
+            rx.hstack(
+                rx.text(col["name"], color=T1, font_size="13px",
+                        font_weight="500", font_family=FONT),
+                rx.cond(
+                    col["maps_to"],
+                    rx.text(
+                        rx.text.span("→ ", color=T4),
+                        rx.text.span(col["maps_to"], color=CYAN),
+                        font_size="11px", font_family=FONT,
+                    ),
+                    rx.box(),
+                ),
+                spacing="2", align="center",
+            ),
+            rx.text(col["reason"], color=T3, font_size="11px", font_family=FONT),
+            spacing="0",
+        ),
+        align="center",
+        spacing="3",
+        width="100%",
+        padding="6px 10px",
+        border_radius=R_SM,
+        transition=EASE,
+        _hover={"background": "rgba(62,231,224,0.04)"},
+    )
+
+
+def _column_relevance_report_panel() -> rx.Component:
+    """Full relevance report panel showing Claude's analysis."""
+    report = DashboardState.column_relevance_report
+    return rx.vstack(
+        # Header
+        rx.hstack(
+            rx.hstack(
+                rx.icon("brain", size=16, color=PURPLE),
+                rx.text("Claude AI Relevance Report", color=T1, font_size="14px",
+                        font_weight="600", font_family=FONT),
+                spacing="2", align="center",
+            ),
+            rx.spacer(),
+            rx.box(
+                rx.text(
+                    report["source"],  # type: ignore[index]
+                    font_size="10px", color=PURPLE, font_family=FONT,
+                    text_transform="uppercase", letter_spacing="0.04em",
+                ),
+                padding="2px 8px",
+                border_radius=R_PILL,
+                background="rgba(166,107,255,0.12)",
+                border="1px solid rgba(166,107,255,0.3)",
+            ),
+            rx.el.button(
+                rx.icon("x", size=14),
+                on_click=DashboardState.clear_column_analysis,
+                background="transparent",
+                color=T3, border="none", cursor="pointer",
+                _hover={"color": T1},
+            ),
+            width="100%", align="center",
+        ),
+        # Summary
+        rx.text(
+            report["file_summary"],  # type: ignore[index]
+            color=T2, font_size="12px", font_family=FONT
+        ),
+        # Stats strip
+        rx.hstack(
+            rx.box(
+                rx.vstack(
+                    rx.text(report["relevant_count"],  # type: ignore[index]
+                            color=GREEN, font_size="20px", font_weight="700", font_family=FONT),
+                    rx.text("Relevant", color=T3, font_size="10px", font_family=FONT),
+                    spacing="0", align="center",
+                ),
+                padding="8px 16px",
+                border_radius=R_MD,
+                background="rgba(76,217,100,0.08)",
+                border=f"1px solid rgba(76,217,100,0.2)",
+                flex="1",
+                text_align="center",
+            ),
+            rx.box(
+                rx.vstack(
+                    rx.text(report["irrelevant_count"],  # type: ignore[index]
+                            color=T4, font_size="20px", font_weight="700", font_family=FONT),
+                    rx.text("Irrelevant", color=T3, font_size="10px", font_family=FONT),
+                    spacing="0", align="center",
+                ),
+                padding="8px 16px",
+                border_radius=R_MD,
+                background="rgba(107,125,153,0.08)",
+                border=f"1px solid rgba(107,125,153,0.2)",
+                flex="1",
+                text_align="center",
+            ),
+            spacing="3", width="100%",
+        ),
+        # Column list
+        rx.vstack(
+            rx.foreach(report["columns"], _column_relevance_row),  # type: ignore[index]
+            spacing="1",
+            width="100%",
+            max_height="300px",
+            overflow_y="auto",
+        ),
+        # Recommendation
+        rx.box(
+            rx.hstack(
+                rx.icon("lightbulb", size=14, color=AMBER),
+                rx.text("Recommendation", color=AMBER, font_size="11px",
+                        font_weight="600", font_family=FONT),
+                spacing="2", align="center",
+            ),
+            rx.text(
+                report["recommendation"],  # type: ignore[index]
+                color=T2, font_size="12px", font_family=FONT,
+            ),
+            padding="10px 14px",
+            border_radius=R_MD,
+            background="rgba(255,192,67,0.06)",
+            border=f"1px solid rgba(255,192,67,0.2)",
+            width="100%",
+        ),
+        spacing="4",
+        width="100%",
+        padding="16px",
+        border_radius=R_LG,
+        background=BG_CARD,
+        border=f"1px solid {BORDER}",
+    )
+
+
+def file_upload_panel() -> rx.Component:
+    """Upload modal for Excel, JSON, and PDF files."""
+    return rx.cond(
+        DashboardState.show_upload_modal,
+        rx.box(
+            rx.box(
+                rx.vstack(
+                    # ── Header ──
+                    rx.hstack(
+                        rx.hstack(
+                            rx.icon("upload", size=18, color=CYAN),
+                            rx.text("Upload Files", color=T1, font_size="16px",
+                                    font_weight="600", font_family=FONT),
+                            spacing="2", align="center",
+                        ),
+                        rx.spacer(),
+                        rx.el.button(
+                            rx.icon("x", size=16),
+                            on_click=DashboardState.toggle_upload_modal,
+                            background="transparent",
+                            color=T3, border="none", cursor="pointer",
+                            _hover={"color": T1},
+                        ),
+                        width="100%", align="center",
+                    ),
+                    rx.text(
+                        "Drag & drop or click to upload Excel (.xlsx/.xls), JSON, or PDF files.",
+                        color=T3, font_size="12px", font_family=FONT,
+                    ),
+                    # ── Drop zone ──
+                    rx.upload(
+                        rx.vstack(
+                            rx.icon("folder-up", size=36, color=CYAN, opacity="0.7"),
+                            rx.text("Drop files here or click to browse",
+                                    color=T2, font_size="13px", font_family=FONT),
+                            rx.text(".xlsx  ·  .xls  ·  .json  ·  .pdf",
+                                    color=T4, font_size="11px", font_family=FONT),
+                            spacing="2", align="center", justify="center",
+                            padding="2rem",
+                        ),
+                        id="file_upload",
+                        multiple=True,
+                        accept={
+                            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": [".xlsx"],
+                            "application/vnd.ms-excel": [".xls"],
+                            "application/json": [".json"],
+                            "application/pdf": [".pdf"],
+                        },
+                        border=f"2px dashed {BORDER}",
+                        border_radius=R_LG,
+                        background=BG_INPUT,
+                        cursor="pointer",
+                        width="100%",
+                        transition=EASE,
+                        _hover={"border_color": CYAN, "background": "rgba(62,231,224,0.04)"},
+                    ),
+                    # ── Upload button ──
+                    rx.hstack(
+                        rx.el.button(
+                            rx.hstack(
+                                rx.icon("upload", size=14),
+                                "Upload Selected",
+                                spacing="2", align="center",
+                            ),
+                            on_click=DashboardState.handle_upload(rx.upload_files(upload_id="file_upload")),
+                            background=CYAN,
+                            color=BG,
+                            border="none",
+                            font_weight="600",
+                            font_size="13px",
+                            font_family=FONT,
+                            padding="8px 20px",
+                            border_radius=R_MD,
+                            cursor="pointer",
+                            transition=EASE,
+                            _hover={"opacity": "0.85", "transform": "translateY(-1px)"},
+                        ),
+                        rx.cond(
+                            DashboardState.uploaded_files.length() > 0,  # type: ignore[attr-defined]
+                            rx.el.button(
+                                rx.hstack(
+                                    rx.icon("trash-2", size=14),
+                                    "Clear All",
+                                    spacing="2", align="center",
+                                ),
+                                on_click=DashboardState.clear_all_uploads,
+                                background="transparent",
+                                color=RED,
+                                border=f"1px solid {RED}",
+                                font_size="12px",
+                                font_family=FONT,
+                                padding="6px 14px",
+                                border_radius=R_MD,
+                                cursor="pointer",
+                                transition=EASE,
+                                _hover={"background": "rgba(255,90,95,0.1)"},
+                            ),
+                            rx.box(),
+                        ),
+                        spacing="3",
+                        width="100%",
+                    ),
+                    # ── Progress bar ──
+                    rx.cond(
+                        DashboardState.is_uploading,
+                        rx.box(
+                            rx.box(
+                                width=DashboardState.upload_progress.to(str) + "%",  # type: ignore[attr-defined]
+                                height="4px",
+                                background=CYAN,
+                                border_radius=R_PILL,
+                                transition="width 300ms ease",
+                            ),
+                            width="100%",
+                            height="4px",
+                            background=BORDER,
+                            border_radius=R_PILL,
+                        ),
+                        rx.box(),
+                    ),
+                    # ── Error message ──
+                    rx.cond(
+                        DashboardState.upload_error != "",
+                        rx.box(
+                            rx.text(DashboardState.upload_error, color=RED,
+                                    font_size="12px", font_family=FONT),
+                            background="rgba(255,90,95,0.08)",
+                            border=f"1px solid {RED}",
+                            border_radius=R_MD,
+                            padding="8px 12px",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    # ── File list ──
+                    rx.cond(
+                        DashboardState.uploaded_files.length() > 0,  # type: ignore[attr-defined]
+                        rx.vstack(
+                            rx.hstack(
+                                rx.text("Uploaded Files", color=T2, font_size="13px",
+                                        font_weight="600", font_family=FONT),
+                                rx.spacer(),
+                                rx.text(
+                                    DashboardState.uploaded_files.length().to(str) + " file(s)",  # type: ignore[attr-defined]
+                                    color=T4, font_size="11px", font_family=FONT,
+                                ),
+                                width="100%", align="center",
+                            ),
+                            rx.vstack(
+                                rx.foreach(DashboardState.uploaded_files, _uploaded_file_row),
+                                spacing="2",
+                                width="100%",
+                                max_height="220px",
+                                overflow_y="auto",
+                            ),
+                            # ── Analyze button ──
+                            rx.el.button(
+                                rx.hstack(
+                                    rx.icon("scan-search", size=14),
+                                    rx.cond(
+                                        DashboardState.is_scraping,
+                                        "Analyzing...",
+                                        "Analyze Files",
+                                    ),
+                                    spacing="2", align="center",
+                                ),
+                                on_click=DashboardState.scrape_uploaded_files,
+                                disabled=DashboardState.is_scraping,
+                                background=BLUE,
+                                color=T1,
+                                border="none",
+                                font_weight="600",
+                                font_size="13px",
+                                font_family=FONT,
+                                padding="8px 20px",
+                                border_radius=R_MD,
+                                cursor="pointer",
+                                width="100%",
+                                transition=EASE,
+                                _hover={"opacity": "0.85", "transform": "translateY(-1px)"},
+                                _disabled={"opacity": "0.5", "cursor": "not-allowed"},
+                            ),
+                            spacing="3",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    # ── Scrape error ──
+                    rx.cond(
+                        DashboardState.scrape_error != "",
+                        rx.box(
+                            rx.text(DashboardState.scrape_error, color=AMBER,
+                                    font_size="12px", font_family=FONT),
+                            background="rgba(255,192,67,0.08)",
+                            border=f"1px solid {AMBER}",
+                            border_radius=R_MD,
+                            padding="8px 12px",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    # ── File insights results ──
+                    rx.cond(
+                        DashboardState.file_insights.length() > 0,  # type: ignore[attr-defined]
+                        rx.vstack(
+                            rx.hstack(
+                                rx.icon("file-search", size=16, color=CYAN),
+                                rx.text("File Insights", color=T1, font_size="14px",
+                                        font_weight="600", font_family=FONT),
+                                rx.spacer(),
+                                rx.el.button(
+                                    rx.icon("x", size=14),
+                                    on_click=DashboardState.clear_file_insights,
+                                    background="transparent",
+                                    color=T3, border="none", cursor="pointer",
+                                    _hover={"color": T1},
+                                ),
+                                width="100%", align="center",
+                            ),
+                            rx.vstack(
+                                rx.foreach(DashboardState.file_insights, _file_insight_card),
+                                spacing="3",
+                                width="100%",
+                                max_height="350px",
+                                overflow_y="auto",
+                            ),
+                            # ── Analyze with Claude button ──
+                            rx.el.button(
+                                rx.hstack(
+                                    rx.icon("brain", size=14),
+                                    rx.cond(
+                                        DashboardState.is_analyzing_columns,
+                                        "Claude is analyzing...",
+                                        "Analyze Relevance with Claude AI",
+                                    ),
+                                    spacing="2", align="center",
+                                ),
+                                on_click=DashboardState.analyze_columns_with_claude,
+                                disabled=DashboardState.is_analyzing_columns,
+                                background=PURPLE,
+                                color=T1,
+                                border="none",
+                                font_weight="600",
+                                font_size="13px",
+                                font_family=FONT,
+                                padding="8px 20px",
+                                border_radius=R_MD,
+                                cursor="pointer",
+                                width="100%",
+                                transition=EASE,
+                                _hover={"opacity": "0.85", "transform": "translateY(-1px)"},
+                                _disabled={"opacity": "0.5", "cursor": "not-allowed"},
+                            ),
+                            spacing="3",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    # ── Column analysis error ──
+                    rx.cond(
+                        DashboardState.column_analysis_error != "",
+                        rx.box(
+                            rx.text(DashboardState.column_analysis_error, color=RED,
+                                    font_size="12px", font_family=FONT),
+                            background="rgba(255,90,95,0.08)",
+                            border=f"1px solid {RED}",
+                            border_radius=R_MD,
+                            padding="8px 12px",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    # ── Claude Relevance Report ──
+                    rx.cond(
+                        DashboardState.column_relevance_report.contains("columns"),  # type: ignore[attr-defined]
+                        _column_relevance_report_panel(),
+                        rx.box(),
+                    ),
+                    spacing="4",
+                    align="stretch",
+                ),
+                background=BG,
+                border=f"1px solid {BORDER}",
+                border_radius=R_LG,
+                padding="24px",
+                width="min(740px, 94vw)",
+                max_height="85vh",
+                overflow_y="auto",
+                box_shadow="0 24px 64px rgba(0,0,0,0.55)",
+                on_click=rx.stop_propagation,
+            ),
+            position="fixed",
+            inset="0",
+            display="flex",
+            align_items="center",
+            justify_content="center",
+            background="rgba(6,10,18,0.78)",
+            z_index="70",
+            on_click=DashboardState.toggle_upload_modal,
+        ),
+        rx.box(),
+    )

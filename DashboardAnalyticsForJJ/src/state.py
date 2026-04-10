@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import shutil
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -21,9 +22,14 @@ from src.agent.graph import (
 	run_save_response_workflow,
 	run_variance_explanation_workflow,
 )
+from src.agent.file_scraper import scrape_all_files
+from src.agent.column_analyzer import ClaudeColumnAnalyzer
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+
+ALLOWED_EXTENSIONS = {".xlsx", ".xls", ".json", ".pdf"}
+UPLOAD_DIR = PROJECT_ROOT / "uploads"
 
 
 class DashboardState(rx.State):
@@ -463,3 +469,167 @@ class DashboardState(rx.State):
 				self.last_action_message = "Daily analytics email draft opened in your default mail client."
 			else:
 				self.chat_error = "; ".join(result.get("errors", ["Unable to send analytics report email."]))
+
+	# ── File Upload ──────────────────────────────────────────────
+
+	uploaded_files: list[dict[str, str]] = []
+	upload_progress: int = 0
+	is_uploading: bool = False
+	upload_error: str = ""
+	show_upload_modal: bool = False
+
+	def toggle_upload_modal(self):
+		self.show_upload_modal = not self.show_upload_modal
+		if not self.show_upload_modal:
+			self.upload_error = ""
+
+	async def handle_upload(self, files: list[rx.UploadFile]):
+		"""Process uploaded files (Excel, JSON, PDF)."""
+		UPLOAD_DIR.mkdir(parents=True, exist_ok=True)
+		self.is_uploading = True
+		self.upload_error = ""
+		self.upload_progress = 0
+		yield
+
+		total = len(files)
+		succeeded: list[dict[str, str]] = []
+		errors: list[str] = []
+
+		for idx, file in enumerate(files):
+			filename = file.filename or f"file_{idx}"
+			ext = Path(filename).suffix.lower()
+
+			if ext not in ALLOWED_EXTENSIONS:
+				errors.append(f"{filename}: unsupported type ({ext}). Allowed: .xlsx, .xls, .json, .pdf")
+				continue
+
+			dest = UPLOAD_DIR / filename
+			try:
+				content = await file.read()
+				dest.write_bytes(content)
+				size_kb = len(content) / 1024
+				succeeded.append({
+					"name": filename,
+					"type": ext.lstrip(".").upper(),
+					"size": f"{size_kb:.1f} KB",
+					"path": str(dest),
+					"timestamp": datetime.now().strftime("%Y-%m-%d %H:%M"),
+				})
+			except Exception as exc:
+				errors.append(f"{filename}: {exc}")
+
+			self.upload_progress = int(((idx + 1) / total) * 100)
+			yield
+
+		self.uploaded_files = [*self.uploaded_files, *succeeded]
+		self.is_uploading = False
+		self.upload_progress = 100
+
+		if errors:
+			self.upload_error = "; ".join(errors)
+		elif succeeded:
+			self.last_action_message = f"Uploaded {len(succeeded)} file(s) successfully."
+		yield
+
+	def remove_uploaded_file(self, file_name: str):
+		"""Remove a file from the uploaded list and disk."""
+		target = next((f for f in self.uploaded_files if f["name"] == file_name), None)
+		if target:
+			path = Path(target["path"])
+			if path.exists():
+				path.unlink()
+			self.uploaded_files = [f for f in self.uploaded_files if f["name"] != file_name]
+
+	def clear_all_uploads(self):
+		"""Remove all uploaded files from disk and state."""
+		for f in self.uploaded_files:
+			path = Path(f["path"])
+			if path.exists():
+				path.unlink()
+		self.uploaded_files = []
+		self.upload_error = ""
+
+	# ── File Scraping / Insights ─────────────────────────────────
+
+	file_insights: list[dict[str, Any]] = []
+	is_scraping: bool = False
+	scrape_error: str = ""
+	show_insights_panel: bool = False
+
+	def toggle_insights_panel(self):
+		self.show_insights_panel = not self.show_insights_panel
+
+	@rx.event(background=True)
+	async def scrape_uploaded_files(self) -> None:
+		"""Scrape all uploaded files to extract metadata and structure."""
+		async with self:
+			if not self.uploaded_files:
+				self.scrape_error = "No files uploaded yet."
+				return
+			file_paths = [f["path"] for f in self.uploaded_files]
+			self.is_scraping = True
+			self.scrape_error = ""
+			self.show_insights_panel = True
+
+		try:
+			results = await asyncio.to_thread(scrape_all_files, file_paths)
+		except Exception as exc:
+			async with self:
+				self.is_scraping = False
+				self.scrape_error = f"Scraping failed: {exc}"
+			return
+
+		async with self:
+			self.is_scraping = False
+			errors = [r["error"] for r in results if "error" in r]
+			if errors:
+				self.scrape_error = "; ".join(errors)
+			self.file_insights = [r for r in results if "error" not in r]
+			if self.file_insights:
+				self.last_action_message = f"Scraped {len(self.file_insights)} file(s) successfully."
+
+	def clear_file_insights(self):
+		self.file_insights = []
+		self.scrape_error = ""
+
+	# ── AI Column Relevance Analysis ────────────────────────────
+
+	column_relevance_report: dict[str, Any] = {}
+	is_analyzing_columns: bool = False
+	column_analysis_error: str = ""
+
+	@rx.event(background=True)
+	async def analyze_columns_with_claude(self) -> None:
+		"""Use Claude to classify column relevance from scraped insights."""
+		async with self:
+			if not self.file_insights:
+				self.column_analysis_error = "Scrape files first before analyzing."
+				return
+			insights_copy = list(self.file_insights)
+			self.is_analyzing_columns = True
+			self.column_analysis_error = ""
+			self.column_relevance_report = {}
+
+		try:
+			analyzer = ClaudeColumnAnalyzer()
+			report = await asyncio.to_thread(analyzer.analyze, insights_copy)
+		except Exception as exc:
+			async with self:
+				self.is_analyzing_columns = False
+				self.column_analysis_error = f"Analysis failed: {exc}"
+			return
+
+		async with self:
+			self.is_analyzing_columns = False
+			if "error" in report and not report.get("columns"):
+				self.column_analysis_error = report["error"]
+			else:
+				self.column_relevance_report = report
+				self.last_action_message = (
+					f"Column analysis complete — {report.get('relevant_count', 0)} relevant, "
+					f"{report.get('irrelevant_count', 0)} irrelevant."
+				)
+
+	def clear_column_analysis(self):
+		self.column_relevance_report = {}
+		self.column_analysis_error = ""

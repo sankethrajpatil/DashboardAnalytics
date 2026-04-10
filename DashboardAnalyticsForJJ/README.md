@@ -29,7 +29,14 @@ A Claude-powered **Spend, Variance, and Risk Analytics Dashboard** that combines
 - **Aging Risk Histogram** — Days-open distribution highlighting long-tail unresolved risks
 - **Expand-to-Modal** — Every chart supports full-screen view with legends, axis labels, and insights
 
-### AI-Powered Insights (Claude 3.5 Sonnet)
+### Multi-File Upload & AI Analysis
+- **Multi-File Upload** — Drag & drop or browse to upload Excel (.xlsx/.xls), JSON, and PDF files
+- **File Scraper** — Automatic extraction of column names, data types, sample values, sheet structure, and PDF headings
+- **Claude Column Analyzer** — AI-powered classification of every column as spend, variance, risk, time, identifier, metadata, or irrelevant
+- **Relevance Report** — Color-coded report with confidence levels, schema mapping, and actionable recommendations
+- **Deterministic Fallback** — Keyword-based column matching when Claude API is unavailable
+
+### AI-Powered Insights (Claude Sonnet)
 - **Variance Explanations** — Hover over a root-cause bar to get a 2-sentence CEO-friendly root-cause analysis
 - **Interactive Chat** — Ask Claude about spend trends, risk clusters, and chart interpretation
 - **Persistent Memory** — Save chat responses for continuity across sessions
@@ -62,7 +69,9 @@ src/
 │   ├── chat.py         # Chat workflow nodes
 │   ├── memory.py       # Persistent chat memory
 │   ├── tools.py        # PDF export, mailto tools
-│   └── email.py        # Daily report formatting
+│   ├── email.py        # Daily report formatting
+│   ├── file_scraper.py # Multi-format file metadata extraction
+│   └── column_analyzer.py # Claude-powered column relevance classifier
 └── ui/
     ├── layout.py       # Page composition and routing
     ├── components.py   # Reusable widgets (cards, filters, modals)
