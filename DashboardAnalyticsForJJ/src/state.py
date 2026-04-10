@@ -63,6 +63,9 @@ class DashboardState(rx.State):
 	aging_risk_histogram_figure: Figure = go.Figure()
 
 	open_risks: list[dict] = []
+	sector_breakdown: list[dict] = []
+	variance_breakdown: list[dict] = []
+	dashboard_insights: list[str] = []
 	variance_explanation: str = "Hover over a variance bar to let Claude explain the selected root cause."
 	last_action_message: str = ""
 	load_error: str = ""
@@ -74,12 +77,14 @@ class DashboardState(rx.State):
 			"role": "assistant",
 			"content": "Welcome to the Claude chatbot panel. Ask about spend trends, root causes, risk clusters, or chart interpretation.",
 			"saved": False,
+			"timestamp": "",
 		}
 	]
 	chat_input: str = ""
 	is_chat_loading: bool = False
 	chat_error: str = ""
 	chat_memory_preview: str = ""
+	chat_scroll_counter: int = 0
 
 	def _current_filters(self) -> dict[str, str]:
 		return {
@@ -191,7 +196,21 @@ class DashboardState(rx.State):
 			self.risk_heatmap_figure = go.Figure(dashboard_state["charts"].get("risk_heatmap", {}))
 			self.aging_risk_histogram_figure = go.Figure(dashboard_state["charts"].get("aging_risk_histogram", {}))
 			self.open_risks = dashboard_state["tables"].get("open_risks", [])
+			# Store data for rich chat context
+			raw_sector = dashboard_state.get("grouped", {}).get("sector_treemap")
+			if raw_sector is not None and hasattr(raw_sector, "to_dict"):
+				self.sector_breakdown = [
+					{"sector": str(r.get("Sector", "")), "po_status": str(r.get("PO_Status", "")), "amount": float(r.get("PO_Total_Amount", 0))}
+					for r in raw_sector.head(15).to_dict("records")
+				]
+			raw_variance = dashboard_state.get("grouped", {}).get("variance_bar")
+			if raw_variance is not None and hasattr(raw_variance, "to_dict"):
+				self.variance_breakdown = [
+					{"root_cause": str(r.get("Root_Cause", "")), "sector": str(r.get("Sector", "")), "variance": float(r.get("Variance_vs_Budget", 0))}
+					for r in raw_variance.head(15).to_dict("records")
+				]
 			insights = dashboard_state.get("insights", [])
+			self.dashboard_insights = insights
 			self.variance_explanation = "\n".join(insights[:2]) if insights else self.variance_explanation
 
 	def set_sector(self, value: str):
@@ -246,6 +265,11 @@ class DashboardState(rx.State):
 
 	def set_chat_input(self, value: str):
 		self.chat_input = value
+
+	def handle_chat_submit(self, form_data: dict):
+		"""Handle form submission from Enter key press."""
+		self.chat_input = form_data.get("chat_input", "")
+		return DashboardState.ask_claude
 
 	def set_active_mode(self, mode: str):
 		self.active_mode = mode
@@ -327,14 +351,16 @@ class DashboardState(rx.State):
 		history_payload = [{"role": item["role"], "content": item["content"]} for item in self.chat_messages]
 		user_message_id = f"user-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 		assistant_message_id = f"assistant-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+		user_ts = datetime.now().strftime("%I:%M %p")
 		async with self:
 			self.chat_error = ""
 			self.is_chat_loading = True
 			self.chat_messages = [
 				*self.chat_messages,
-				{"id": user_message_id, "role": "user", "content": user_message, "saved": False},
+				{"id": user_message_id, "role": "user", "content": user_message, "saved": False, "timestamp": user_ts},
 			]
 			self.chat_input = ""
+			self.chat_scroll_counter += 1
 
 		data_context = {
 			"metrics": {
@@ -344,6 +370,10 @@ class DashboardState(rx.State):
 				"addressable_spend_pct": self.addressable_spend_pct_display,
 			},
 			"filters": self._current_filters(),
+			"open_risks": self.open_risks,
+			"sector_breakdown": self.sector_breakdown,
+			"variance_breakdown": self.variance_breakdown,
+			"insights": self.dashboard_insights,
 			"variance_explanation": self.variance_explanation,
 		}
 
@@ -360,6 +390,7 @@ class DashboardState(rx.State):
 			if not assistant_message:
 				self.chat_error = "Claude response was empty. Please try again."
 				return
+			reply_ts = datetime.now().strftime("%I:%M %p")
 			self.chat_messages = [
 				*self.chat_messages,
 				{
@@ -367,8 +398,10 @@ class DashboardState(rx.State):
 					"role": "assistant",
 					"content": assistant_message,
 					"saved": False,
+					"timestamp": reply_ts,
 				},
 			]
+			self.chat_scroll_counter += 1
 			self.chat_memory_preview = result.get("chat_state", {}).get("saved_memory", "")[-1200:]
 
 	@rx.event(background=True)
@@ -392,6 +425,29 @@ class DashboardState(rx.State):
 				updated_messages.append(item)
 		async with self:
 			self.chat_messages = updated_messages
+			self.last_action_message = result.get("save_result", {}).get("message", "Response saved.")
+
+	@rx.event(background=True)
+	async def save_last_response(self) -> None:
+		"""Save the most recent unsaved assistant message."""
+		last_msg = None
+		for msg in reversed(self.chat_messages):
+			if msg.get("role") == "assistant" and not msg.get("saved"):
+				last_msg = msg
+				break
+		if not last_msg:
+			return
+		result = await asyncio.to_thread(
+			run_save_response_workflow, str(last_msg.get("content", "")), PROJECT_ROOT,
+		)
+		updated = []
+		for item in self.chat_messages:
+			if str(item.get("id")) == str(last_msg["id"]):
+				updated.append({**item, "saved": True})
+			else:
+				updated.append(item)
+		async with self:
+			self.chat_messages = updated
 			self.last_action_message = result.get("save_result", {}).get("message", "Response saved.")
 
 	@rx.event(background=True)

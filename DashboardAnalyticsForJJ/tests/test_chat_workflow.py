@@ -44,4 +44,4 @@ def test_saved_memory_is_injected_into_future_chat_calls(tmp_path: Path) -> None
 	)
 
 	assert "Remember this prior response." in result["chat_state"]["saved_memory"]
-	assert "Saved memory was considered." in result["chat_state"]["assistant_message"]
+	assert "Claude API is unavailable" in result["chat_state"]["assistant_message"]

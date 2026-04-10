@@ -228,6 +228,10 @@ def update_state_node(state: WorkflowState) -> WorkflowState:
 		"filter_options": state.get("filter_options", {}),
 		"filters": state.get("filters", _default_filters()),
 		"insights": _build_summary_lines(metrics, grouped),
+		"grouped": {
+			"sector_treemap": grouped["sector_treemap"],
+			"variance_bar": grouped["variance_bar"],
+		},
 		"status": "ready",
 	}
 	return {

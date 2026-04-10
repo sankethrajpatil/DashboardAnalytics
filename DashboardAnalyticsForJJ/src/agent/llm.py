@@ -31,7 +31,7 @@ class ClaudeExplanationResult:
 class ClaudeVarianceExplainer:
 	"""Generate variance explanations using Anthropic when configured."""
 
-	def __init__(self, api_key: str | None = None, model: str = "claude-3-5-sonnet-latest") -> None:
+	def __init__(self, api_key: str | None = None, model: str = "claude-sonnet-4-6") -> None:
 		load_dotenv()
 		resolved_key = api_key or os.getenv("ANTHROPIC_API_KEY")
 		self._model = model
@@ -102,7 +102,7 @@ class ClaudeVarianceExplainer:
 class ClaudeChatAssistant:
 	"""Chat-oriented Anthropic client with memory and history context."""
 
-	def __init__(self, api_key: str | None = None, model: str = "claude-3-5-sonnet-latest") -> None:
+	def __init__(self, api_key: str | None = None, model: str = "claude-sonnet-4-6") -> None:
 		load_dotenv()
 		resolved_key = api_key or os.getenv("ANTHROPIC_API_KEY")
 		self._model = model
@@ -116,19 +116,21 @@ class ClaudeChatAssistant:
 		data_context: dict[str, Any],
 	) -> dict[str, str]:
 		"""Generate a chat answer with explicit memory and context injection."""
-		prompt = self._build_chat_prompt(user_message, chat_history, saved_memory, data_context)
+		system_prompt = self._build_system_prompt(saved_memory, data_context)
+		messages = self._build_messages(user_message, chat_history)
 		if self._client is None:
 			return {
-			"assistant_message": self._fallback_response(user_message, saved_memory, data_context),
-			"source": "deterministic-fallback",
-			"model": "fallback",
-		}
+				"assistant_message": "[API key not configured] " + self._fallback_response(user_message, saved_memory, data_context),
+				"source": "deterministic-fallback",
+				"model": "fallback",
+			}
 		try:
 			response = self._client.messages.create(
 				model=self._model,
-				max_tokens=500,
-				temperature=0,
-				messages=[{"role": "user", "content": prompt}],
+				max_tokens=1024,
+				temperature=0.2,
+				system=system_prompt,
+				messages=messages,
 			)
 			assistant_message = " ".join(
 				block.text.strip()
@@ -142,44 +144,110 @@ class ClaudeChatAssistant:
 				"source": "anthropic",
 				"model": self._model,
 			}
-		except Exception:
+		except Exception as exc:
+			error_hint = str(exc)[:200]
 			return {
-				"assistant_message": self._fallback_response(user_message, saved_memory, data_context),
+				"assistant_message": f"[Claude API error: {error_hint}] " + self._fallback_response(user_message, saved_memory, data_context),
 				"source": "deterministic-fallback",
 				"model": "fallback",
 			}
 
-	def _build_chat_prompt(
-		self,
-		user_message: str,
-		chat_history: list[dict[str, str]],
-		saved_memory: str,
-		data_context: dict[str, Any],
-	) -> str:
-		recent_history = chat_history[-12:]
-		prompt_payload = {
-			"instructions": [
-				"You are Claude in DashboardAnalyticsForJJ.",
-				"Answer dataset and chart questions with concrete metrics and clear reasoning.",
-				"Support follow-up questions by using prior history and saved memory.",
-			],
-			"saved_memory": saved_memory,
-			"recent_chat_history": recent_history,
-			"data_context": data_context,
-			"user_message": user_message,
-		}
-		return json.dumps(prompt_payload, indent=2, default=str)
+	def _build_system_prompt(self, saved_memory: str, data_context: dict[str, Any]) -> str:
+		metrics = data_context.get("metrics", {})
+		filters = data_context.get("filters", {})
+		open_risks = data_context.get("open_risks", [])
+		sector_breakdown = data_context.get("sector_breakdown", [])
+		variance_breakdown = data_context.get("variance_breakdown", [])
+		insights = data_context.get("insights", [])
+
+		sections = [
+			"You are Claude, the AI analytics assistant embedded in DashboardAnalyticsForJJ — an executive spend, variance, and risk analytics dashboard.",
+			"Answer the user's questions directly and specifically using the live dashboard data provided below.",
+			"Be concise, data-driven, and actionable. Use specific numbers from the data. Do not repeat the question back.",
+			"",
+			"=== CURRENT DASHBOARD METRICS ===",
+			f"Total PO Volume: {metrics.get('total_po_volume', 'n/a')}",
+			f"Average Variance: {metrics.get('average_variance', 'n/a')}",
+			f"Active Risk Count: {metrics.get('active_risk_count', 'n/a')}",
+			f"Addressable Spend %: {metrics.get('addressable_spend_pct', 'n/a')}",
+			f"Total Spend: {metrics.get('total_spend', 'n/a')}",
+		]
+
+		if filters:
+			sections.append("")
+			sections.append("=== ACTIVE FILTERS ===")
+			for key, val in filters.items():
+				sections.append(f"{key}: {val}")
+
+		if sector_breakdown:
+			sections.append("")
+			sections.append("=== SECTOR SPEND BREAKDOWN (top entries) ===")
+			for entry in sector_breakdown[:10]:
+				sections.append(f"- {entry.get('sector', '?')} ({entry.get('po_status', '?')}): ${entry.get('amount', 0):,.2f}")
+
+		if variance_breakdown:
+			sections.append("")
+			sections.append("=== ROOT CAUSE VARIANCE BREAKDOWN (top entries) ===")
+			for entry in variance_breakdown[:10]:
+				sections.append(f"- {entry.get('root_cause', '?')} / {entry.get('sector', '?')}: ${entry.get('variance', 0):,.2f}")
+
+		if open_risks:
+			sections.append("")
+			sections.append("=== TOP OPEN RISKS ===")
+			for risk in open_risks[:8]:
+				sections.append(
+					f"- [{risk.get('risk_id', '?')}] {risk.get('risk_description', '?')[:80]} "
+					f"(owner: {risk.get('risk_owner', '?')}, status: {risk.get('risk_status', '?')}, "
+					f"days open: {risk.get('days_open', '?')})"
+				)
+
+		if insights:
+			sections.append("")
+			sections.append("=== DASHBOARD INSIGHTS ===")
+			for line in insights:
+				sections.append(f"- {line}")
+
+		if data_context.get("variance_explanation"):
+			sections.append("")
+			sections.append(f"=== LAST VARIANCE EXPLANATION ===\n{data_context['variance_explanation']}")
+
+		if saved_memory and saved_memory.strip():
+			sections.append("")
+			sections.append("=== SAVED CHAT MEMORY ===")
+			sections.append(saved_memory[-2000:])
+
+		return "\n".join(sections)
+
+	def _build_messages(self, user_message: str, chat_history: list[dict[str, str]]) -> list[dict[str, str]]:
+		"""Build a proper multi-turn message list for the Claude API."""
+		messages: list[dict[str, str]] = []
+		recent = chat_history[-16:]
+		for entry in recent:
+			role = entry.get("role", "user")
+			if role in ("user", "assistant") and entry.get("content", "").strip():
+				messages.append({"role": role, "content": entry["content"]})
+		# Ensure messages alternate properly and start with user
+		deduped: list[dict[str, str]] = []
+		for msg in messages:
+			if deduped and deduped[-1]["role"] == msg["role"]:
+				deduped[-1]["content"] += "\n" + msg["content"]
+			else:
+				deduped.append(msg)
+		if deduped and deduped[0]["role"] != "user":
+			deduped = deduped[1:]
+		deduped.append({"role": "user", "content": user_message})
+		return deduped
 
 	def _fallback_response(self, user_message: str, saved_memory: str, data_context: dict[str, Any]) -> str:
 		metrics = data_context.get("metrics", {})
-		summary = (
-			f"Current dashboard context shows Total PO Volume {metrics.get('total_po_volume', 'n/a')}, "
-			f"Average Variance {metrics.get('average_variance', 'n/a')}, "
-			f"Active Risk Count {metrics.get('active_risk_count', 'n/a')}, "
-			f"and Addressable Spend % {metrics.get('addressable_spend_pct', 'n/a')}."
-		)
-		memory_hint = "Saved memory was considered." if saved_memory.strip() else "No saved memory was available yet."
-		return (
-			f"You asked: {user_message}. {summary} {memory_hint} "
-			"Ask a follow-up about a chart, root cause, risk cluster, or spend concentration for a deeper answer."
-		)
+		parts = []
+		if metrics.get("total_po_volume"):
+			parts.append(f"Total PO Volume is {metrics['total_po_volume']}")
+		if metrics.get("average_variance"):
+			parts.append(f"Average Variance is {metrics['average_variance']}")
+		if metrics.get("active_risk_count"):
+			parts.append(f"Active Risk Count is {metrics['active_risk_count']}")
+		if metrics.get("addressable_spend_pct"):
+			parts.append(f"Addressable Spend is {metrics['addressable_spend_pct']}")
+		summary = ". ".join(parts) + "." if parts else "No dashboard data available."
+		return f"Based on current dashboard data: {summary} (Note: Claude API is unavailable — this is a limited fallback response.)"
