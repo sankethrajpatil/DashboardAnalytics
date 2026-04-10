@@ -22,6 +22,7 @@ from src.agent.graph import (
 	run_save_response_workflow,
 	run_variance_explanation_workflow,
 )
+from src.agent.file_scraper import scrape_all_files
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -546,3 +547,46 @@ class DashboardState(rx.State):
 				path.unlink()
 		self.uploaded_files = []
 		self.upload_error = ""
+
+	# ── File Scraping / Insights ─────────────────────────────────
+
+	file_insights: list[dict[str, Any]] = []
+	is_scraping: bool = False
+	scrape_error: str = ""
+	show_insights_panel: bool = False
+
+	def toggle_insights_panel(self):
+		self.show_insights_panel = not self.show_insights_panel
+
+	@rx.event(background=True)
+	async def scrape_uploaded_files(self) -> None:
+		"""Scrape all uploaded files to extract metadata and structure."""
+		async with self:
+			if not self.uploaded_files:
+				self.scrape_error = "No files uploaded yet."
+				return
+			file_paths = [f["path"] for f in self.uploaded_files]
+			self.is_scraping = True
+			self.scrape_error = ""
+			self.show_insights_panel = True
+
+		try:
+			results = await asyncio.to_thread(scrape_all_files, file_paths)
+		except Exception as exc:
+			async with self:
+				self.is_scraping = False
+				self.scrape_error = f"Scraping failed: {exc}"
+			return
+
+		async with self:
+			self.is_scraping = False
+			errors = [r["error"] for r in results if "error" in r]
+			if errors:
+				self.scrape_error = "; ".join(errors)
+			self.file_insights = [r for r in results if "error" not in r]
+			if self.file_insights:
+				self.last_action_message = f"Scraped {len(self.file_insights)} file(s) successfully."
+
+	def clear_file_insights(self):
+		self.file_insights = []
+		self.scrape_error = ""

@@ -912,6 +912,76 @@ def _uploaded_file_row(file: rx.Var[dict]) -> rx.Component:
     )
 
 
+def _column_tag(col_name: rx.Var[str]) -> rx.Component:
+    """Small tag for a column name."""
+    return rx.box(
+        rx.text(col_name, font_size="11px", color=CYAN, font_family=FONT),
+        padding="2px 8px",
+        border_radius=R_PILL,
+        background="rgba(62,231,224,0.08)",
+        border=f"1px solid rgba(62,231,224,0.25)",
+        display="inline-block",
+    )
+
+
+def _file_insight_card(insight: rx.Var[dict]) -> rx.Component:
+    """Render a card showing scraped metadata for one file."""
+    return rx.vstack(
+        # Header: type badge + name + summary
+        rx.hstack(
+            _file_type_badge(insight["type"]),
+            rx.text(insight["name"], color=T1, font_size="13px",
+                    font_weight="600", font_family=FONT),
+            spacing="2", align="center",
+        ),
+        rx.text(insight["summary"], color=T2, font_size="12px", font_family=FONT),
+        # Column names
+        rx.cond(
+            insight["column_names"].length() > 0,  # type: ignore[attr-defined]
+            rx.vstack(
+                rx.text("Columns / Fields", color=T3, font_size="11px",
+                        font_weight="600", font_family=FONT, letter_spacing="0.04em"),
+                rx.box(
+                    rx.foreach(insight["column_names"], _column_tag),
+                    display="flex",
+                    flex_wrap="wrap",
+                    gap="6px",
+                ),
+                spacing="2", width="100%",
+            ),
+            rx.box(),
+        ),
+        # Headings (PDF)
+        rx.cond(
+            insight["type"] == "PDF",
+            rx.cond(
+                insight["headings"].length() > 0,  # type: ignore[attr-defined]
+                rx.vstack(
+                    rx.text("Headings Detected", color=T3, font_size="11px",
+                            font_weight="600", font_family=FONT, letter_spacing="0.04em"),
+                    rx.vstack(
+                        rx.foreach(
+                            insight["headings"],
+                            lambda h: rx.text(h, color=T2, font_size="12px", font_family=FONT),
+                        ),
+                        spacing="1", width="100%",
+                        max_height="120px", overflow_y="auto",
+                    ),
+                    spacing="2", width="100%",
+                ),
+                rx.box(),
+            ),
+            rx.box(),
+        ),
+        spacing="3",
+        width="100%",
+        padding="12px 16px",
+        border_radius=R_MD,
+        background=BG_INPUT,
+        border=f"1px solid {BORDER}",
+    )
+
+
 def file_upload_panel() -> rx.Component:
     """Upload modal for Excel, JSON, and PDF files."""
     return rx.cond(
@@ -1067,7 +1137,78 @@ def file_upload_panel() -> rx.Component:
                                 max_height="220px",
                                 overflow_y="auto",
                             ),
-                            spacing="2",
+                            # ── Analyze button ──
+                            rx.el.button(
+                                rx.hstack(
+                                    rx.icon("scan-search", size=14),
+                                    rx.cond(
+                                        DashboardState.is_scraping,
+                                        "Analyzing...",
+                                        "Analyze Files",
+                                    ),
+                                    spacing="2", align="center",
+                                ),
+                                on_click=DashboardState.scrape_uploaded_files,
+                                disabled=DashboardState.is_scraping,
+                                background=BLUE,
+                                color=T1,
+                                border="none",
+                                font_weight="600",
+                                font_size="13px",
+                                font_family=FONT,
+                                padding="8px 20px",
+                                border_radius=R_MD,
+                                cursor="pointer",
+                                width="100%",
+                                transition=EASE,
+                                _hover={"opacity": "0.85", "transform": "translateY(-1px)"},
+                                _disabled={"opacity": "0.5", "cursor": "not-allowed"},
+                            ),
+                            spacing="3",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    # ── Scrape error ──
+                    rx.cond(
+                        DashboardState.scrape_error != "",
+                        rx.box(
+                            rx.text(DashboardState.scrape_error, color=AMBER,
+                                    font_size="12px", font_family=FONT),
+                            background="rgba(255,192,67,0.08)",
+                            border=f"1px solid {AMBER}",
+                            border_radius=R_MD,
+                            padding="8px 12px",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    # ── File insights results ──
+                    rx.cond(
+                        DashboardState.file_insights.length() > 0,  # type: ignore[attr-defined]
+                        rx.vstack(
+                            rx.hstack(
+                                rx.icon("file-search", size=16, color=CYAN),
+                                rx.text("File Insights", color=T1, font_size="14px",
+                                        font_weight="600", font_family=FONT),
+                                rx.spacer(),
+                                rx.el.button(
+                                    rx.icon("x", size=14),
+                                    on_click=DashboardState.clear_file_insights,
+                                    background="transparent",
+                                    color=T3, border="none", cursor="pointer",
+                                    _hover={"color": T1},
+                                ),
+                                width="100%", align="center",
+                            ),
+                            rx.vstack(
+                                rx.foreach(DashboardState.file_insights, _file_insight_card),
+                                spacing="3",
+                                width="100%",
+                                max_height="350px",
+                                overflow_y="auto",
+                            ),
+                            spacing="3",
                             width="100%",
                         ),
                         rx.box(),
@@ -1079,10 +1220,11 @@ def file_upload_panel() -> rx.Component:
                 border=f"1px solid {BORDER}",
                 border_radius=R_LG,
                 padding="24px",
-                width="min(560px, 92vw)",
+                width="min(680px, 92vw)",
                 max_height="85vh",
                 overflow_y="auto",
                 box_shadow="0 24px 64px rgba(0,0,0,0.55)",
+                on_click=rx.stop_propagation,
             ),
             position="fixed",
             inset="0",
