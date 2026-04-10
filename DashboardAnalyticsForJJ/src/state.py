@@ -23,6 +23,7 @@ from src.agent.graph import (
 	run_variance_explanation_workflow,
 )
 from src.agent.file_scraper import scrape_all_files
+from src.agent.column_analyzer import ClaudeColumnAnalyzer
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -590,3 +591,45 @@ class DashboardState(rx.State):
 	def clear_file_insights(self):
 		self.file_insights = []
 		self.scrape_error = ""
+
+	# ── AI Column Relevance Analysis ────────────────────────────
+
+	column_relevance_report: dict[str, Any] = {}
+	is_analyzing_columns: bool = False
+	column_analysis_error: str = ""
+
+	@rx.event(background=True)
+	async def analyze_columns_with_claude(self) -> None:
+		"""Use Claude to classify column relevance from scraped insights."""
+		async with self:
+			if not self.file_insights:
+				self.column_analysis_error = "Scrape files first before analyzing."
+				return
+			insights_copy = list(self.file_insights)
+			self.is_analyzing_columns = True
+			self.column_analysis_error = ""
+			self.column_relevance_report = {}
+
+		try:
+			analyzer = ClaudeColumnAnalyzer()
+			report = await asyncio.to_thread(analyzer.analyze, insights_copy)
+		except Exception as exc:
+			async with self:
+				self.is_analyzing_columns = False
+				self.column_analysis_error = f"Analysis failed: {exc}"
+			return
+
+		async with self:
+			self.is_analyzing_columns = False
+			if "error" in report and not report.get("columns"):
+				self.column_analysis_error = report["error"]
+			else:
+				self.column_relevance_report = report
+				self.last_action_message = (
+					f"Column analysis complete — {report.get('relevant_count', 0)} relevant, "
+					f"{report.get('irrelevant_count', 0)} irrelevant."
+				)
+
+	def clear_column_analysis(self):
+		self.column_relevance_report = {}
+		self.column_analysis_error = ""

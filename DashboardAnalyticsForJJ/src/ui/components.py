@@ -982,6 +982,207 @@ def _file_insight_card(insight: rx.Var[dict]) -> rx.Component:
     )
 
 
+# ═══════════════════════════════════════════════════════════════
+# Claude Column Relevance Report
+# ═══════════════════════════════════════════════════════════════
+
+_CATEGORY_COLORS = {
+    "spend": GREEN,
+    "variance": PURPLE,
+    "risk": RED,
+    "time": BLUE,
+    "identifier": CYAN,
+    "metadata": AMBER,
+    "irrelevant": T4,
+}
+
+_CATEGORY_ICONS = {
+    "spend": "dollar-sign",
+    "variance": "trending-up",
+    "risk": "shield-alert",
+    "time": "clock",
+    "identifier": "key",
+    "metadata": "tag",
+    "irrelevant": "x-circle",
+}
+
+
+def _category_badge(category: rx.Var[str]) -> rx.Component:
+    """Colored pill for a column category."""
+    return rx.box(
+        rx.text(category, font_size="10px", font_weight="700",
+                text_transform="uppercase", letter_spacing="0.04em"),
+        padding="2px 10px",
+        border_radius=R_PILL,
+        color=BG,
+        background=rx.match(
+            category,
+            ("spend", GREEN),
+            ("variance", PURPLE),
+            ("risk", RED),
+            ("time", BLUE),
+            ("identifier", CYAN),
+            ("metadata", AMBER),
+            ("irrelevant", T4),
+            T3,
+        ),
+    )
+
+
+def _confidence_dot(confidence: rx.Var[str]) -> rx.Component:
+    """Small dot indicating confidence level."""
+    return rx.box(
+        width="8px", height="8px",
+        border_radius="50%",
+        background=rx.match(
+            confidence,
+            ("high", GREEN),
+            ("medium", AMBER),
+            ("low", RED),
+            T4,
+        ),
+        title=confidence,
+    )
+
+
+def _column_relevance_row(col: rx.Var[dict]) -> rx.Component:
+    """Single row in the relevance report."""
+    return rx.hstack(
+        _category_badge(col["category"]),
+        _confidence_dot(col["confidence"]),
+        rx.vstack(
+            rx.hstack(
+                rx.text(col["name"], color=T1, font_size="13px",
+                        font_weight="500", font_family=FONT),
+                rx.cond(
+                    col["maps_to"],
+                    rx.text(
+                        rx.text.span("→ ", color=T4),
+                        rx.text.span(col["maps_to"], color=CYAN),
+                        font_size="11px", font_family=FONT,
+                    ),
+                    rx.box(),
+                ),
+                spacing="2", align="center",
+            ),
+            rx.text(col["reason"], color=T3, font_size="11px", font_family=FONT),
+            spacing="0",
+        ),
+        align="center",
+        spacing="3",
+        width="100%",
+        padding="6px 10px",
+        border_radius=R_SM,
+        transition=EASE,
+        _hover={"background": "rgba(62,231,224,0.04)"},
+    )
+
+
+def _column_relevance_report_panel() -> rx.Component:
+    """Full relevance report panel showing Claude's analysis."""
+    report = DashboardState.column_relevance_report
+    return rx.vstack(
+        # Header
+        rx.hstack(
+            rx.hstack(
+                rx.icon("brain", size=16, color=PURPLE),
+                rx.text("Claude AI Relevance Report", color=T1, font_size="14px",
+                        font_weight="600", font_family=FONT),
+                spacing="2", align="center",
+            ),
+            rx.spacer(),
+            rx.box(
+                rx.text(
+                    report["source"],  # type: ignore[index]
+                    font_size="10px", color=PURPLE, font_family=FONT,
+                    text_transform="uppercase", letter_spacing="0.04em",
+                ),
+                padding="2px 8px",
+                border_radius=R_PILL,
+                background="rgba(166,107,255,0.12)",
+                border="1px solid rgba(166,107,255,0.3)",
+            ),
+            rx.el.button(
+                rx.icon("x", size=14),
+                on_click=DashboardState.clear_column_analysis,
+                background="transparent",
+                color=T3, border="none", cursor="pointer",
+                _hover={"color": T1},
+            ),
+            width="100%", align="center",
+        ),
+        # Summary
+        rx.text(
+            report["file_summary"],  # type: ignore[index]
+            color=T2, font_size="12px", font_family=FONT
+        ),
+        # Stats strip
+        rx.hstack(
+            rx.box(
+                rx.vstack(
+                    rx.text(report["relevant_count"],  # type: ignore[index]
+                            color=GREEN, font_size="20px", font_weight="700", font_family=FONT),
+                    rx.text("Relevant", color=T3, font_size="10px", font_family=FONT),
+                    spacing="0", align="center",
+                ),
+                padding="8px 16px",
+                border_radius=R_MD,
+                background="rgba(76,217,100,0.08)",
+                border=f"1px solid rgba(76,217,100,0.2)",
+                flex="1",
+                text_align="center",
+            ),
+            rx.box(
+                rx.vstack(
+                    rx.text(report["irrelevant_count"],  # type: ignore[index]
+                            color=T4, font_size="20px", font_weight="700", font_family=FONT),
+                    rx.text("Irrelevant", color=T3, font_size="10px", font_family=FONT),
+                    spacing="0", align="center",
+                ),
+                padding="8px 16px",
+                border_radius=R_MD,
+                background="rgba(107,125,153,0.08)",
+                border=f"1px solid rgba(107,125,153,0.2)",
+                flex="1",
+                text_align="center",
+            ),
+            spacing="3", width="100%",
+        ),
+        # Column list
+        rx.vstack(
+            rx.foreach(report["columns"], _column_relevance_row),  # type: ignore[index]
+            spacing="1",
+            width="100%",
+            max_height="300px",
+            overflow_y="auto",
+        ),
+        # Recommendation
+        rx.box(
+            rx.hstack(
+                rx.icon("lightbulb", size=14, color=AMBER),
+                rx.text("Recommendation", color=AMBER, font_size="11px",
+                        font_weight="600", font_family=FONT),
+                spacing="2", align="center",
+            ),
+            rx.text(
+                report["recommendation"],  # type: ignore[index]
+                color=T2, font_size="12px", font_family=FONT,
+            ),
+            padding="10px 14px",
+            border_radius=R_MD,
+            background="rgba(255,192,67,0.06)",
+            border=f"1px solid rgba(255,192,67,0.2)",
+            width="100%",
+        ),
+        spacing="4",
+        width="100%",
+        padding="16px",
+        border_radius=R_LG,
+        background=BG_CARD,
+        border=f"1px solid {BORDER}",
+    )
+
+
 def file_upload_panel() -> rx.Component:
     """Upload modal for Excel, JSON, and PDF files."""
     return rx.cond(
@@ -1208,9 +1409,56 @@ def file_upload_panel() -> rx.Component:
                                 max_height="350px",
                                 overflow_y="auto",
                             ),
+                            # ── Analyze with Claude button ──
+                            rx.el.button(
+                                rx.hstack(
+                                    rx.icon("brain", size=14),
+                                    rx.cond(
+                                        DashboardState.is_analyzing_columns,
+                                        "Claude is analyzing...",
+                                        "Analyze Relevance with Claude AI",
+                                    ),
+                                    spacing="2", align="center",
+                                ),
+                                on_click=DashboardState.analyze_columns_with_claude,
+                                disabled=DashboardState.is_analyzing_columns,
+                                background=PURPLE,
+                                color=T1,
+                                border="none",
+                                font_weight="600",
+                                font_size="13px",
+                                font_family=FONT,
+                                padding="8px 20px",
+                                border_radius=R_MD,
+                                cursor="pointer",
+                                width="100%",
+                                transition=EASE,
+                                _hover={"opacity": "0.85", "transform": "translateY(-1px)"},
+                                _disabled={"opacity": "0.5", "cursor": "not-allowed"},
+                            ),
                             spacing="3",
                             width="100%",
                         ),
+                        rx.box(),
+                    ),
+                    # ── Column analysis error ──
+                    rx.cond(
+                        DashboardState.column_analysis_error != "",
+                        rx.box(
+                            rx.text(DashboardState.column_analysis_error, color=RED,
+                                    font_size="12px", font_family=FONT),
+                            background="rgba(255,90,95,0.08)",
+                            border=f"1px solid {RED}",
+                            border_radius=R_MD,
+                            padding="8px 12px",
+                            width="100%",
+                        ),
+                        rx.box(),
+                    ),
+                    # ── Claude Relevance Report ──
+                    rx.cond(
+                        DashboardState.column_relevance_report.contains("columns"),  # type: ignore[attr-defined]
+                        _column_relevance_report_panel(),
                         rx.box(),
                     ),
                     spacing="4",
@@ -1220,7 +1468,7 @@ def file_upload_panel() -> rx.Component:
                 border=f"1px solid {BORDER}",
                 border_radius=R_LG,
                 padding="24px",
-                width="min(680px, 92vw)",
+                width="min(740px, 94vw)",
                 max_height="85vh",
                 overflow_y="auto",
                 box_shadow="0 24px 64px rgba(0,0,0,0.55)",
