@@ -29,7 +29,6 @@ def build_sector_treemap(data: pd.DataFrame, filters: dict[str, str]) -> go.Figu
 		by_sector,
 		names="Sector",
 		values="PO_Total_Amount",
-		title="Sector-Wise Spend Treemap",
 		color_discrete_sequence=CYAN_GRADIENT + BLUE_GRADIENT + PURPLE_GRADIENT,
 	)
 	figure.update_traces(
@@ -52,7 +51,6 @@ def build_root_cause_variance_bar(data: pd.DataFrame, filters: dict[str, str]) -
 		y="Root_Cause",
 		color="Sector",
 		orientation="h",
-		title="Root Cause Variance Bar Chart",
 		color_discrete_sequence=BLUE_GRADIENT + PURPLE_GRADIENT + CYAN_GRADIENT,
 	)
 	figure.update_layout(barmode="group")
@@ -113,7 +111,6 @@ def build_trend_and_seasonality_line(data: pd.DataFrame, filters: dict[str, str]
 		)
 
 	figure.update_layout(
-		title="Trend & Seasonality Line Chart",
 		yaxis={"title": "Monthly Spend", "showgrid": True, "gridcolor": "rgba(138, 147, 166, 0.2)"},
 		yaxis2={
 			"title": "Cumulative Variance",
@@ -138,7 +135,6 @@ def build_risk_heatmap(data: pd.DataFrame, filters: dict[str, str]) -> go.Figure
 		text_auto=True,
 		aspect="auto",
 		color_continuous_scale=RISK_SCALE,
-		title="Risk Heatmap",
 	)
 	figure.update_traces(hovertemplate="Likelihood=%{y}<br>Impact=%{x}<br>Risks=%{z}<extra></extra>")
 	figure.update_layout(coloraxis_colorbar={"title": "Risk Count"})
@@ -151,7 +147,6 @@ def build_aging_risk_histogram(data: pd.DataFrame, filters: dict[str, str]) -> g
 		data,
 		x="Days_Open",
 		nbins=12,
-		title="Aging Risk Histogram",
 		color_discrete_sequence=["#4C8DFF"],
 	)
 	figure.update_traces(
@@ -164,28 +159,26 @@ def build_aging_risk_histogram(data: pd.DataFrame, filters: dict[str, str]) -> g
 
 
 def _apply_layout(figure: go.Figure, filters: dict[str, str]) -> go.Figure:
-	subtitle = ", ".join(f"{key.replace('_', ' ').title()}: {value}" for key, value in filters.items())
 	figure.update_layout(
 		paper_bgcolor=CHART_BACKGROUND,
 		plot_bgcolor=PLOT_BACKGROUND,
-		margin={"l": 40, "r": 20, "t": 72, "b": 40},
+		margin={"l": 40, "r": 20, "t": 24, "b": 40},
 		font={"family": "Inter, SF Pro, Poppins, sans-serif", "size": 13, "color": "#F5F7FA"},
-		legend={"orientation": "h", "yanchor": "bottom", "y": 1.02, "xanchor": "left", "x": 0},
-		title={"font": {"size": 16, "color": "#F5F7FA"}},
+		showlegend=True,
+		legend={
+			"orientation": "h",
+			"yanchor": "bottom",
+			"y": 1.01,
+			"xanchor": "left",
+			"x": 0,
+			"font": {"size": 11, "color": "#D7E4F7"},
+			"bgcolor": "rgba(0,0,0,0)",
+			"itemwidth": 30,
+		},
+		title=None,
 		hoverlabel={"bgcolor": "#0B1221", "bordercolor": "#3EE7E0", "font": {"color": "#F5F7FA"}},
 		transition={"duration": 260, "easing": "cubic-in-out"},
 	)
 	figure.update_xaxes(showgrid=True, gridcolor="rgba(138, 147, 166, 0.16)", zeroline=False)
 	figure.update_yaxes(showgrid=True, gridcolor="rgba(138, 147, 166, 0.16)", zeroline=False)
-	if subtitle:
-		figure.add_annotation(
-			x=0,
-			y=1.11,
-			xref="paper",
-			yref="paper",
-			text=subtitle,
-			showarrow=False,
-			align="left",
-			font={"size": 11, "color": "#8A93A6"},
-		)
 	return figure
