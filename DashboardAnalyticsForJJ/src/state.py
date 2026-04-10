@@ -63,6 +63,9 @@ class DashboardState(rx.State):
 	aging_risk_histogram_figure: Figure = go.Figure()
 
 	open_risks: list[dict] = []
+	sector_breakdown: list[dict] = []
+	variance_breakdown: list[dict] = []
+	dashboard_insights: list[str] = []
 	variance_explanation: str = "Hover over a variance bar to let Claude explain the selected root cause."
 	last_action_message: str = ""
 	load_error: str = ""
@@ -191,7 +194,21 @@ class DashboardState(rx.State):
 			self.risk_heatmap_figure = go.Figure(dashboard_state["charts"].get("risk_heatmap", {}))
 			self.aging_risk_histogram_figure = go.Figure(dashboard_state["charts"].get("aging_risk_histogram", {}))
 			self.open_risks = dashboard_state["tables"].get("open_risks", [])
+			# Store data for rich chat context
+			raw_sector = dashboard_state.get("grouped", {}).get("sector_treemap")
+			if raw_sector is not None and hasattr(raw_sector, "to_dict"):
+				self.sector_breakdown = [
+					{"sector": str(r.get("Sector", "")), "po_status": str(r.get("PO_Status", "")), "amount": float(r.get("PO_Total_Amount", 0))}
+					for r in raw_sector.head(15).to_dict("records")
+				]
+			raw_variance = dashboard_state.get("grouped", {}).get("variance_bar")
+			if raw_variance is not None and hasattr(raw_variance, "to_dict"):
+				self.variance_breakdown = [
+					{"root_cause": str(r.get("Root_Cause", "")), "sector": str(r.get("Sector", "")), "variance": float(r.get("Variance_vs_Budget", 0))}
+					for r in raw_variance.head(15).to_dict("records")
+				]
 			insights = dashboard_state.get("insights", [])
+			self.dashboard_insights = insights
 			self.variance_explanation = "\n".join(insights[:2]) if insights else self.variance_explanation
 
 	def set_sector(self, value: str):
@@ -246,6 +263,11 @@ class DashboardState(rx.State):
 
 	def set_chat_input(self, value: str):
 		self.chat_input = value
+
+	def handle_chat_submit(self, form_data: dict):
+		"""Handle form submission from Enter key press."""
+		self.chat_input = form_data.get("chat_input", "")
+		return DashboardState.ask_claude
 
 	def set_active_mode(self, mode: str):
 		self.active_mode = mode
@@ -344,6 +366,10 @@ class DashboardState(rx.State):
 				"addressable_spend_pct": self.addressable_spend_pct_display,
 			},
 			"filters": self._current_filters(),
+			"open_risks": self.open_risks,
+			"sector_breakdown": self.sector_breakdown,
+			"variance_breakdown": self.variance_breakdown,
+			"insights": self.dashboard_insights,
 			"variance_explanation": self.variance_explanation,
 		}
 
