@@ -77,6 +77,7 @@ class DashboardState(rx.State):
 			"role": "assistant",
 			"content": "Welcome to the Claude chatbot panel. Ask about spend trends, root causes, risk clusters, or chart interpretation.",
 			"saved": False,
+			"timestamp": "",
 		}
 	]
 	chat_input: str = ""
@@ -350,12 +351,13 @@ class DashboardState(rx.State):
 		history_payload = [{"role": item["role"], "content": item["content"]} for item in self.chat_messages]
 		user_message_id = f"user-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
 		assistant_message_id = f"assistant-{datetime.now().strftime('%Y%m%d%H%M%S%f')}"
+		user_ts = datetime.now().strftime("%I:%M %p")
 		async with self:
 			self.chat_error = ""
 			self.is_chat_loading = True
 			self.chat_messages = [
 				*self.chat_messages,
-				{"id": user_message_id, "role": "user", "content": user_message, "saved": False},
+				{"id": user_message_id, "role": "user", "content": user_message, "saved": False, "timestamp": user_ts},
 			]
 			self.chat_input = ""
 			self.chat_scroll_counter += 1
@@ -388,6 +390,7 @@ class DashboardState(rx.State):
 			if not assistant_message:
 				self.chat_error = "Claude response was empty. Please try again."
 				return
+			reply_ts = datetime.now().strftime("%I:%M %p")
 			self.chat_messages = [
 				*self.chat_messages,
 				{
@@ -395,6 +398,7 @@ class DashboardState(rx.State):
 					"role": "assistant",
 					"content": assistant_message,
 					"saved": False,
+					"timestamp": reply_ts,
 				},
 			]
 			self.chat_scroll_counter += 1
@@ -421,6 +425,29 @@ class DashboardState(rx.State):
 				updated_messages.append(item)
 		async with self:
 			self.chat_messages = updated_messages
+			self.last_action_message = result.get("save_result", {}).get("message", "Response saved.")
+
+	@rx.event(background=True)
+	async def save_last_response(self) -> None:
+		"""Save the most recent unsaved assistant message."""
+		last_msg = None
+		for msg in reversed(self.chat_messages):
+			if msg.get("role") == "assistant" and not msg.get("saved"):
+				last_msg = msg
+				break
+		if not last_msg:
+			return
+		result = await asyncio.to_thread(
+			run_save_response_workflow, str(last_msg.get("content", "")), PROJECT_ROOT,
+		)
+		updated = []
+		for item in self.chat_messages:
+			if str(item.get("id")) == str(last_msg["id"]):
+				updated.append({**item, "saved": True})
+			else:
+				updated.append(item)
+		async with self:
+			self.chat_messages = updated
 			self.last_action_message = result.get("save_result", {}).get("message", "Response saved.")
 
 	@rx.event(background=True)
