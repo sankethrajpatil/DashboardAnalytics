@@ -7,9 +7,56 @@ import reflex as rx
 from src.state import DashboardState
 
 
+# --- Custom scrollbar CSS for dark theme ---
+_SCROLLBAR_CSS = {
+	"&::-webkit-scrollbar": {"width": "6px"},
+	"&::-webkit-scrollbar-track": {"background": "transparent"},
+	"&::-webkit-scrollbar-thumb": {
+		"background": "rgba(62, 231, 224, 0.25)",
+		"border_radius": "8px",
+	},
+	"&::-webkit-scrollbar-thumb:hover": {
+		"background": "rgba(62, 231, 224, 0.45)",
+	},
+	"scrollbar-width": "thin",
+	"scrollbar-color": "rgba(62, 231, 224, 0.25) transparent",
+}
+
+# --- Markdown component map for dark-themed rendering ---
+_MARKDOWN_COMPONENT_MAP = {
+	"p": lambda text: rx.text(text, color="#D7E4F7", size="3", line_height="1.6", margin_bottom="0.3rem"),
+	"h1": lambda text: rx.heading(text, size="4", color="#3EE7E0", margin_bottom="0.3rem"),
+	"h2": lambda text: rx.heading(text, size="3", color="#3EE7E0", margin_bottom="0.25rem"),
+	"h3": lambda text: rx.heading(text, size="2", color="#4C8DFF", margin_bottom="0.2rem"),
+	"strong": lambda text: rx.text(text, as_="strong", color="#F5F7FA", font_weight="700"),
+	"em": lambda text: rx.text(text, as_="em", color="#9BB3D1"),
+	"li": lambda text: rx.el.li(text, color="#D7E4F7", font_size="13px", line_height="1.5", margin_left="0.5rem"),
+	"ul": lambda children: rx.el.ul(children, padding_left="1rem", margin_bottom="0.3rem"),
+	"ol": lambda children: rx.el.ol(children, padding_left="1rem", margin_bottom="0.3rem"),
+	"code": lambda text: rx.code(text, color="#3EE7E0", background="rgba(62, 231, 224, 0.1)", padding="0.1rem 0.3rem", border_radius="4px", font_size="12px"),
+}
+
+
+# --- Auto-scroll JS triggered by a counter change ---
+_AUTO_SCROLL_JS = """
+(function() {
+	var el = document.getElementById('chat-messages-scroll');
+	if (el) { el.scrollTop = el.scrollHeight; }
+})();
+"""
+
+
 def chat_panel() -> rx.Component:
 	"""Render the futuristic Claude chat panel with dock and floating controls."""
 	return rx.box(
+		# Auto-scroll: invisible span keyed to scroll counter triggers re-render → script runs
+		rx.el.span(
+			rx.script(
+				"setTimeout(function(){ var el = document.getElementById('chat-messages-scroll'); if (el) el.scrollTop = el.scrollHeight; }, 80);"
+			),
+			key=DashboardState.chat_scroll_counter.to(str),
+			display="none",
+		),
 		rx.el.div(
 			_header_row(),
 			rx.cond(
@@ -27,6 +74,7 @@ def chat_panel() -> rx.Component:
 				rx.box(),
 				rx.box(
 					rx.foreach(DashboardState.chat_messages, _chat_message_card),
+					id="chat-messages-scroll",
 					width="100%",
 					flex="1 1 0",
 					min_height="0",
@@ -36,6 +84,7 @@ def chat_panel() -> rx.Component:
 					gap="0.75rem",
 					padding_right="0.25rem",
 					padding_bottom="0.35rem",
+					**_SCROLLBAR_CSS,
 				),
 			),
 			rx.cond(
@@ -67,9 +116,9 @@ def chat_panel() -> rx.Component:
 			height="100%",
 			overflow="hidden",
 		),
-		width=rx.cond(DashboardState.chat_panel_collapsed, "74px", "340px"),
-		min_width=rx.cond(DashboardState.chat_panel_collapsed, "74px", "340px"),
-		max_width=rx.cond(DashboardState.chat_panel_collapsed, "74px", "340px"),
+		width=rx.cond(DashboardState.chat_panel_collapsed, "74px", "420px"),
+		min_width=rx.cond(DashboardState.chat_panel_collapsed, "74px", "420px"),
+		max_width=rx.cond(DashboardState.chat_panel_collapsed, "74px", "420px"),
 		height=rx.cond(DashboardState.chat_panel_mode == "floating", "72vh", "100vh"),
 		padding="1rem",
 		background="#0B1221",
@@ -285,13 +334,24 @@ def _chat_message_card(message: dict) -> rx.Component:
 				align="center",
 				width="100%",
 			),
-			rx.text(
-				message["content"],
-				color="#D7E4F7",
-				size="3",
-				white_space="pre-wrap",
-				font_family="Inter, SF Pro, Poppins, sans-serif",
-				line_height="1.5",
+			rx.cond(
+				is_assistant,
+				rx.markdown(
+					message["content"],
+					component_map=_MARKDOWN_COMPONENT_MAP,
+					color="#D7E4F7",
+					font_family="Inter, SF Pro, Poppins, sans-serif",
+					line_height="1.6",
+					width="100%",
+				),
+				rx.text(
+					message["content"],
+					color="#D7E4F7",
+					size="3",
+					white_space="pre-wrap",
+					font_family="Inter, SF Pro, Poppins, sans-serif",
+					line_height="1.5",
+				),
 			),
 			spacing="3",
 			align="stretch",

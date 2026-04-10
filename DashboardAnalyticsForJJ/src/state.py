@@ -83,6 +83,7 @@ class DashboardState(rx.State):
 	is_chat_loading: bool = False
 	chat_error: str = ""
 	chat_memory_preview: str = ""
+	chat_scroll_counter: int = 0
 
 	def _current_filters(self) -> dict[str, str]:
 		return {
@@ -357,6 +358,7 @@ class DashboardState(rx.State):
 				{"id": user_message_id, "role": "user", "content": user_message, "saved": False},
 			]
 			self.chat_input = ""
+			self.chat_scroll_counter += 1
 
 		data_context = {
 			"metrics": {
@@ -395,6 +397,7 @@ class DashboardState(rx.State):
 					"saved": False,
 				},
 			]
+			self.chat_scroll_counter += 1
 			self.chat_memory_preview = result.get("chat_state", {}).get("saved_memory", "")[-1200:]
 
 	@rx.event(background=True)
