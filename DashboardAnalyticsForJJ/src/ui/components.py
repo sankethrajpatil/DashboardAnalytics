@@ -1,4 +1,11 @@
-"""Reusable Reflex UI components."""
+"""Reusable Reflex UI components — enterprise analytics dashboard.
+
+Design system following Material/Carbon/Fluent BI UX patterns:
+- 4/8/12/16/24 px spacing scale
+- Consistent typography hierarchy: label → title → value
+- 12-column responsive grid via CSS grid
+- Compact, high-density information layout
+"""
 
 from __future__ import annotations
 
@@ -6,587 +13,848 @@ import reflex as rx
 
 from src.state import DashboardState
 
+# ═══════════════════════════════════════════════════════════════
+# Design Tokens
+# ═══════════════════════════════════════════════════════════════
 
-DEEP_SPACE_NAVY = "#0B1221"
-SOFT_GRAPHITE = "#1E2635"
-SLATE_GREY = "#8A93A6"
-FROST_WHITE = "#F5F7FA"
-ELECTRIC_CYAN = "#3EE7E0"
-AZURE_PULSE_BLUE = "#4C8DFF"
-RISK_RED = "#FF5A5F"
-SUCCESS_GREEN = "#4CD964"
+# Palette
+BG = "#0B1221"
+BG_CARD = "#1E2635"
+BG_INPUT = "#111A2A"
+T1 = "#F5F7FA"          # primary text
+T2 = "#D7E4F7"          # secondary text
+T3 = "#8A93A6"          # muted / labels
+T4 = "#6B7D99"          # hint
+CYAN = "#3EE7E0"
+BLUE = "#4C8DFF"
+PURPLE = "#A66BFF"
+GREEN = "#4CD964"
+RED = "#FF5A5F"
+AMBER = "#FFC043"
+BORDER = "#253047"
+BORDER_SUBTLE = "#1E2A3E"
 
+# Typography
+FONT = "Inter, SF Pro, Poppins, sans-serif"
 
-def metric_card(title: str, value: str, accent_color: str, icon_symbol: str, trend_text: str) -> rx.Component:
-	"""Render one executive summary metric tile."""
-	is_positive_trend = trend_text.startswith("+")
-	return rx.box(
-		rx.hstack(
-			rx.badge(
-				icon_symbol,
-				background="rgba(62, 231, 224, 0.16)",
-				color=ELECTRIC_CYAN,
-				border="1px solid rgba(62, 231, 224, 0.45)",
-				border_radius="10px",
-				padding="0.25rem 0.45rem",
-			),
-			rx.badge(
-				trend_text,
-				background=rx.cond(is_positive_trend, "rgba(76, 217, 100, 0.16)", "rgba(255, 90, 95, 0.16)"),
-				color=rx.cond(is_positive_trend, SUCCESS_GREEN, RISK_RED),
-				border=rx.cond(is_positive_trend, "1px solid rgba(76, 217, 100, 0.5)", "1px solid rgba(255, 90, 95, 0.5)"),
-				border_radius="999px",
-				padding="0.2rem 0.55rem",
-			),
-			justify="between",
-			align="center",
-			width="100%",
-		),
-		rx.text(
-			title,
-			font_size="12px",
-			color=SLATE_GREY,
-			text_transform="uppercase",
-			letter_spacing="0.08em",
-			font_family="Inter, SF Pro, Poppins, sans-serif",
-		),
-		rx.text(
-			value,
-			font_size="56px",
-			line_height="1",
-			font_weight="700",
-			color=FROST_WHITE,
-			font_family="Inter, SF Pro, Poppins, sans-serif",
-		),
-		rx.text(
-			"vs prior range",
-			font_size="13px",
-			color=SLATE_GREY,
-			font_family="Inter, SF Pro, Poppins, sans-serif",
-		),
-		padding="1.1rem 1.2rem",
-		border_radius="12px",
-		background=SOFT_GRAPHITE,
-		border=f"1px solid {accent_color}",
-		box_shadow="0 10px 28px rgba(62, 231, 224, 0.12)",
-		transition="all 180ms ease",
-		_hover={"transform": "translateY(-2px)", "box_shadow": "0 16px 32px rgba(76, 141, 255, 0.2)"},
-		width="100%",
-	)
+# Spacing scale (px): 4 8 12 16 24 32
+SP4 = "4px"
+SP8 = "8px"
+SP12 = "12px"
+SP16 = "16px"
+SP24 = "24px"
+
+# Radii
+R_SM = "6px"
+R_MD = "10px"
+R_LG = "14px"
+R_PILL = "999px"
+
+# Transitions
+EASE = "all 180ms cubic-bezier(.4,0,.2,1)"
 
 
-def analytics_mode_tabs() -> rx.Component:
-	"""Render top-level analytics mode tabs."""
-	return rx.hstack(
-		_mode_tab("Overview", "overview"),
-		_mode_tab("Spend", "spend"),
-		_mode_tab("Risk", "risk"),
-		_mode_tab("Forecast", "forecast"),
-		spacing="2",
-		width="100%",
-		flex_wrap="wrap",
-	)
+# ═══════════════════════════════════════════════════════════════
+# 1. Filter Bar — unified strip with clear hierarchy
+# ═══════════════════════════════════════════════════════════════
 
 
 def dashboard_controls_panel() -> rx.Component:
-	"""Render dashboard controls and action utilities in the analytics area."""
-	return rx.vstack(
-		rx.hstack(
-			rx.hstack(
-				rx.text(
-					"Filters",
-					font_size="14px",
-					font_weight="700",
-					color=FROST_WHITE,
-					font_family="Inter, SF Pro, Poppins, sans-serif",
-				),
-				rx.button(
-					rx.cond(DashboardState.show_filters, "Hide Filters", "Show Filters"),
-					on_click=DashboardState.toggle_filters,
-					background="rgba(62, 231, 224, 0.14)",
-					border="1px solid #3EE7E0",
-					color=ELECTRIC_CYAN,
-					border_radius="999px",
-					padding="0.35rem 0.75rem",
-					font_size="12px",
-					transition="all 220ms ease-in-out",
-					_hover={"box_shadow": "0 0 18px rgba(62, 231, 224, 0.25)"},
-				),
-				rx.button(
-					rx.cond(DashboardState.show_advanced_filters, "Advanced -", "Advanced +"),
-					on_click=DashboardState.toggle_advanced_filters,
-					background="rgba(76, 141, 255, 0.14)",
-					border="1px solid #4C8DFF",
-					color="#CFE0FF",
-					border_radius="999px",
-					padding="0.35rem 0.75rem",
-					font_size="12px",
-				),
-				spacing="2",
-				align="center",
-			),
-			time_range_selector(),
-			justify="between",
-			width="100%",
-			align="center",
-		),
-		rx.box(width="100%", height="1px", background="#2A3650"),
-		_filter_chip_row(),
-		rx.cond(
-			DashboardState.show_filters,
-			rx.vstack(
-				rx.hstack(
-					_filter_control("Sector", DashboardState.sector_options, DashboardState.selected_sector, DashboardState.set_sector),
-					_filter_control("PO Status", DashboardState.po_status_options, DashboardState.selected_po_status, DashboardState.set_po_status),
-					time_range_selector(compact=True),
-					spacing="2",
-					width="100%",
-					align="end",
-				),
-				rx.box(
-					rx.hstack(
-						_filter_control("Addressable", DashboardState.addressable_options, DashboardState.selected_addressable, DashboardState.set_addressable),
-						_filter_control("Risk Status", DashboardState.risk_status_options, DashboardState.selected_risk_status, DashboardState.set_risk_status),
-						spacing="2",
-						width="100%",
-					),
-					max_height=rx.cond(DashboardState.show_advanced_filters, "180px", "0px"),
-					overflow="hidden",
-					opacity=rx.cond(DashboardState.show_advanced_filters, "1", "0"),
-					transition="all 260ms ease-in-out",
-					width="100%",
-				),
-				spacing="2",
-				width="100%",
-				align="stretch",
-			),
-			rx.box(),
-		),
-		rx.button(
-			"Export PDF Summary",
-			on_click=DashboardState.export_report,
-			width="100%",
-			background=AZURE_PULSE_BLUE,
-			color=DEEP_SPACE_NAVY,
-			font_family="Inter, SF Pro, Poppins, sans-serif",
-			font_weight="700",
-			border_radius="12px",
-			transition="all 180ms ease",
-			_hover={"box_shadow": "0 10px 22px rgba(76, 141, 255, 0.35)", "transform": "translateY(-1px)"},
-		),
-		rx.cond(
-			DashboardState.last_action_message != "",
-			rx.box(
-				rx.text(DashboardState.last_action_message, color=SUCCESS_GREEN, size="3"),
-				background="#11211A",
-				padding="0.85rem",
-				border_radius="12px",
-				border=f"1px solid {SUCCESS_GREEN}",
-				width="100%",
-			),
-			rx.box(),
-		),
-		width="100%",
-		spacing="4",
-		padding="1rem",
-		border_radius="12px",
-		background=SOFT_GRAPHITE,
-		border="1px solid #253047",
-		box_shadow="0 10px 24px rgba(0, 0, 0, 0.25)",
-		align="stretch",
-	)
+    """Unified filter bar: date pills | dropdowns | toggle/export actions."""
+    return rx.vstack(
+        # ── primary row ──
+        rx.hstack(
+            _time_range_pills(),
+            _filter_select("Sector", DashboardState.sector_options,
+                           DashboardState.selected_sector, DashboardState.set_sector),
+            _filter_select("PO Status", DashboardState.po_status_options,
+                           DashboardState.selected_po_status, DashboardState.set_po_status),
+            rx.spacer(),
+            # advanced toggle — subtle icon+label button
+            rx.el.button(
+                rx.hstack(
+                    rx.icon("sliders-horizontal", size=13),
+                    rx.cond(DashboardState.show_advanced_filters, "Less", "More"),
+                    spacing="1", align="center",
+                ),
+                on_click=DashboardState.toggle_advanced_filters,
+                title="Advanced filters",
+                background="transparent",
+                color=T3,
+                border="none",
+                font_size="12px",
+                font_family=FONT,
+                cursor="pointer",
+                padding="4px 8px",
+                border_radius=R_SM,
+                transition=EASE,
+                _hover={"color": CYAN, "background": "rgba(62,231,224,0.06)"},
+            ),
+            # hide/show toggle — icon+label
+            rx.el.button(
+                rx.hstack(
+                    rx.icon(
+                        rx.cond(DashboardState.show_filters, "eye-off", "eye"),
+                        size=13,
+                    ),
+                    rx.cond(DashboardState.show_filters, "Hide", "Filters"),
+                    spacing="1", align="center",
+                ),
+                on_click=DashboardState.toggle_filters,
+                title="Toggle filter visibility",
+                background="transparent",
+                color=T3,
+                border="none",
+                font_size="12px",
+                font_family=FONT,
+                cursor="pointer",
+                padding="4px 8px",
+                border_radius=R_SM,
+                transition=EASE,
+                _hover={"color": CYAN, "background": "rgba(62,231,224,0.06)"},
+            ),
+            # export — ghost button with icon
+            rx.el.button(
+                rx.hstack(
+                    rx.icon("download", size=13),
+                    "Export",
+                    spacing="1", align="center",
+                ),
+                on_click=DashboardState.export_report,
+                title="Export PDF summary",
+                background="transparent",
+                color=T3,
+                border=f"1px solid {BORDER}",
+                font_size="12px",
+                font_weight="500",
+                font_family=FONT,
+                cursor="pointer",
+                padding="4px 10px",
+                border_radius=R_SM,
+                transition=EASE,
+                _hover={"color": BLUE, "border_color": BLUE,
+                        "background": "rgba(76,141,255,0.06)"},
+            ),
+            spacing="3",
+            align="center",
+            width="100%",
+            flex_wrap="wrap",
+        ),
+        # ── advanced row (animated slide) ──
+        rx.box(
+            rx.hstack(
+                _filter_select("Addressable", DashboardState.addressable_options,
+                               DashboardState.selected_addressable, DashboardState.set_addressable),
+                _filter_select("Risk Status", DashboardState.risk_status_options,
+                               DashboardState.selected_risk_status, DashboardState.set_risk_status),
+                spacing="3",
+                width="100%",
+            ),
+            max_height=rx.cond(
+                DashboardState.show_filters & DashboardState.show_advanced_filters,
+                "60px", "0px",
+            ),
+            opacity=rx.cond(
+                DashboardState.show_filters & DashboardState.show_advanced_filters,
+                "1", "0",
+            ),
+            overflow="hidden",
+            transition="all 250ms ease-in-out",
+            width="100%",
+        ),
+        # ── active chip summary ──
+        _filter_chip_row(),
+        # ── status toast ──
+        rx.cond(
+            DashboardState.last_action_message != "",
+            rx.hstack(
+                rx.icon("circle-check", size=14, color=GREEN),
+                rx.text(DashboardState.last_action_message, color=GREEN, size="2"),
+                spacing="2", align="center",
+                background="rgba(76,217,100,0.08)",
+                padding="4px 10px",
+                border_radius=R_MD,
+                border=f"1px solid rgba(76,217,100,0.25)",
+                width="100%",
+            ),
+            rx.box(),
+        ),
+        # outer container
+        width="100%",
+        spacing="2",
+        padding="8px 12px",
+        border_radius=R_LG,
+        background=BG_CARD,
+        border=f"1px solid {BORDER}",
+    )
+
+
+def _time_range_pills() -> rx.Component:
+    """Single unified date range selector — no duplicates."""
+    return rx.hstack(
+        _tr_pill("Today", "today"),
+        _tr_pill("Week", "week"),
+        _tr_pill("Month", "month"),
+        spacing="1",
+        padding="3px",
+        background=BG_INPUT,
+        border=f"1px solid {BORDER}",
+        border_radius=R_PILL,
+        flex_shrink="0",
+    )
+
+
+def _tr_pill(label: str, value: str) -> rx.Component:
+    active = DashboardState.selected_time_range == value
+    return rx.el.button(
+        label,
+        on_click=DashboardState.set_time_range(value),
+        background=rx.cond(active, "rgba(62,231,224,0.18)", "transparent"),
+        color=rx.cond(active, CYAN, T3),
+        border=rx.cond(active, f"1px solid {CYAN}", "1px solid transparent"),
+        border_radius=R_PILL,
+        padding="3px 10px",
+        font_size="11px",
+        font_weight="600",
+        font_family=FONT,
+        cursor="pointer",
+        white_space="nowrap",
+        transition=EASE,
+        _hover={"color": CYAN},
+    )
+
+
+def _filter_select(label: str, options, value, on_change) -> rx.Component:
+    """Compact labelled dropdown — right-sized for its container."""
+    return rx.hstack(
+        rx.text(label, font_size="11px", color=T3, font_family=FONT,
+                white_space="nowrap", flex_shrink="0"),
+        rx.select(
+            options,
+            value=value,
+            on_change=on_change,
+            size="1",
+            radius="medium",
+        ),
+        spacing="2",
+        align="center",
+        flex_shrink="0",
+    )
 
 
 def _filter_chip_row() -> rx.Component:
-	return rx.hstack(
-		rx.foreach(
-			DashboardState.active_filter_chips,
-			lambda chip: rx.badge(
-				chip,
-				background="rgba(62, 231, 224, 0.15)",
-				color=ELECTRIC_CYAN,
-				border="1px solid rgba(62, 231, 224, 0.4)",
-				border_radius="999px",
-				padding="0.25rem 0.6rem",
-			),
-		),
-		spacing="2",
-		flex_wrap="wrap",
-		width="100%",
-	)
+    return rx.cond(
+        DashboardState.show_filters,
+        rx.hstack(
+            rx.foreach(
+                DashboardState.active_filter_chips,
+                lambda chip: rx.el.span(
+                    chip,
+                    style={
+                        "background": "rgba(62,231,224,0.10)",
+                        "color": CYAN,
+                        "border": f"1px solid rgba(62,231,224,0.30)",
+                        "border-radius": R_PILL,
+                        "padding": "2px 8px",
+                        "font-size": "11px",
+                        "font-family": FONT,
+                        "white-space": "nowrap",
+                    },
+                ),
+            ),
+            spacing="2",
+            flex_wrap="wrap",
+            width="100%",
+        ),
+        rx.box(),
+    )
 
 
+# keep legacy name for imports that use it
 def time_range_selector(compact: bool = False) -> rx.Component:
-	"""Render futuristic pill selector for Today, Week, and Month views."""
-	caption = rx.cond(compact, rx.box(), rx.text("Time Range", font_size="12px", weight="bold", color=SLATE_GREY))
-	return rx.vstack(
-		caption,
-		rx.hstack(
-			_time_range_pill("Today", "today"),
-			_time_range_pill("This Week", "week"),
-			_time_range_pill("This Month", "month"),
-			spacing="1",
-			padding="0.25rem",
-			background="#111A2A",
-			border="1px solid #2A3650",
-			border_radius="999px",
-			width="fit-content",
-			flex_shrink="0",
-		),
-		spacing="1",
-		align="start",
-		flex_shrink="0",
-	)
+    """Backward-compat wrapper."""
+    return _time_range_pills()
 
 
-def predictive_insight_card() -> rx.Component:
-	"""Render styled predictive insight card near spend trend charts."""
-	return rx.box(
-		rx.hstack(
-			rx.badge(
-				"AI",
-				background="rgba(62, 231, 224, 0.18)",
-				color=ELECTRIC_CYAN,
-				border="1px solid rgba(62, 231, 224, 0.45)",
-				border_radius="10px",
-				padding="0.25rem 0.45rem",
-			),
-			rx.vstack(
-				rx.text("Claude Variance Insight", weight="bold", color=FROST_WHITE, font_size="14px"),
-				rx.text(
-					DashboardState.variance_explanation,
-					white_space="pre-wrap",
-					color="#D6E3F7",
-					size="3",
-					font_family="Inter, SF Pro, Poppins, sans-serif",
-				),
-				spacing="1",
-				align="stretch",
-			),
-			spacing="3",
-			align="start",
-			width="100%",
-		),
-		padding="1rem",
-		border_radius="12px",
-		background="#111A2A",
-		border=f"1px solid {ELECTRIC_CYAN}",
-		box_shadow="0 10px 24px rgba(62, 231, 224, 0.12)",
-		transition="all 200ms ease-in-out",
-		_hover={"transform": "translateY(-1px)", "box_shadow": "0 14px 28px rgba(62, 231, 224, 0.2)"},
-		width="100%",
-	)
+# ═══════════════════════════════════════════════════════════════
+# 2. KPI Band — compact horizontal row, all KPIs visible at once
+# ═══════════════════════════════════════════════════════════════
 
 
-def risk_owner_card(risk: dict) -> rx.Component:
-	"""Render a single open-risk action card."""
-	return rx.box(
-		rx.hstack(
-			rx.vstack(
-				rx.text(
-					f"Risk {risk['risk_id']}",
-					weight="bold",
-					color=FROST_WHITE,
-					font_family="Inter, SF Pro, Poppins, sans-serif",
-				),
-				rx.text(
-					risk["risk_description"],
-					color=SLATE_GREY,
-					size="3",
-					font_family="Inter, SF Pro, Poppins, sans-serif",
-				),
-				rx.hstack(
-					rx.badge(
-						risk["risk_status"],
-						background="#3A2B14",
-						color="#FFC043",
-						border_radius="999px",
-					),
-					rx.badge(
-						f"{risk['days_open']} days open",
-						background="#3B1F2A",
-						color=RISK_RED,
-						border_radius="999px",
-					),
-					spacing="2",
-				),
-				spacing="2",
-				align="start",
-				width="100%",
-			),
-			rx.button(
-				risk["risk_owner"],
-				on_click=DashboardState.email_risk_owner(risk["risk_id"]),
-				background=ELECTRIC_CYAN,
-				color=DEEP_SPACE_NAVY,
-				border_radius="12px",
-				font_weight="700",
-				_hover={"box_shadow": "0 10px 20px rgba(62, 231, 224, 0.3)"},
-				white_space="nowrap",
-			),
-			justify="between",
-			align="start",
-			width="100%",
-		),
-		padding="1rem",
-		border_radius="12px",
-		background="#111A2A",
-		border="1px solid #27324A",
-		box_shadow="0 8px 18px rgba(62, 231, 224, 0.08)",
-		width="100%",
-	)
+def metric_card(
+    title: str, value: str, accent_color: str,
+    icon_symbol: str, trend_text: str,
+) -> rx.Component:
+    """Compact KPI tile: accent bar | label + value + trend badge."""
+    is_positive = trend_text.startswith("+")
+    trend_color = rx.cond(is_positive, GREEN, RED)
+    trend_bg = rx.cond(is_positive,
+                       "rgba(76,217,100,0.12)", "rgba(255,90,95,0.12)")
+    return rx.box(
+        rx.hstack(
+            # accent bar
+            rx.box(
+                width="3px",
+                height="100%",
+                border_radius="2px",
+                background=accent_color,
+                flex_shrink="0",
+            ),
+            rx.vstack(
+                # title + trend
+                rx.hstack(
+                    rx.text(
+                        title, font_size="11px", color=T3,
+                        text_transform="uppercase", letter_spacing="0.06em",
+                        font_family=FONT, white_space="nowrap",
+                    ),
+                    rx.el.span(
+                        trend_text,
+                        style={
+                            "font-size": "10px",
+                            "font-weight": "600",
+                            "font-family": FONT,
+                            "padding": "1px 6px",
+                            "border-radius": R_PILL,
+                            "white-space": "nowrap",
+                        },
+                        color=trend_color,
+                        background=trend_bg,
+                    ),
+                    spacing="2",
+                    align="center",
+                ),
+                # value
+                rx.text(
+                    value,
+                    font_size="26px",
+                    line_height="1.1",
+                    font_weight="700",
+                    color=T1,
+                    font_family=FONT,
+                ),
+                spacing="1",
+                align="start",
+                justify="center",
+                flex="1",
+            ),
+            spacing="3",
+            align="stretch",
+            height="100%",
+        ),
+        padding="8px 12px",
+        border_radius=R_MD,
+        background=BG_CARD,
+        border=f"1px solid {BORDER}",
+        transition=EASE,
+        _hover={
+            "border_color": accent_color,
+            "box_shadow": f"0 4px 16px rgba(62,231,224,0.10)",
+        },
+        height="72px",
+        min_width="0",
+        flex="1",
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# 3. Chart Card — reusable template: header | body | no Plotly title
+# ═══════════════════════════════════════════════════════════════
 
 
 def chart_card(
-	chart_id: str,
-	title: str,
-	figure,
-	* ,
-	on_hover=None,
+    chart_id: str,
+    title: str,
+    figure,
+    *,
+    on_hover=None,
 ) -> rx.Component:
-	"""Render a consistent chart card with Expand action."""
-	chart_component = rx.cond(
-		on_hover is None,
-		rx.plotly(data=figure, width="100%", height="100%"),
-		rx.plotly(data=figure, on_hover=on_hover, width="100%", height="100%"),
-	)
-	return rx.box(
-		rx.vstack(
-			rx.hstack(
-				rx.text(
-					title,
-					font_size="14px",
-					font_weight="600",
-					color=FROST_WHITE,
-					font_family="Inter, SF Pro, Poppins, sans-serif",
-				),
-				rx.button(
-					"Expand",
-					on_click=DashboardState.open_chart_modal(chart_id),
-					background="rgba(76, 141, 255, 0.14)",
-					color="#DCE9FF",
-					border="1px solid #4C8DFF",
-					border_radius="10px",
-					padding="0.4rem 0.65rem",
-					font_size="12px",
-					font_weight="600",
-					transition="all 200ms ease-in-out",
-					_hover={"transform": "translateY(-1px)", "box_shadow": "0 10px 20px rgba(76, 141, 255, 0.28)"},
-				),
-				justify="between",
-				align="center",
-				width="100%",
-			),
-			rx.box(chart_component, width="100%", flex="1", min_height="0"),
-			spacing="3",
-			align="stretch",
-			height="100%",
-		),
-		background=SOFT_GRAPHITE,
-		border="1px solid #253047",
-		border_radius="12px",
-		padding="1rem",
-		box_shadow="0 10px 24px rgba(76, 141, 255, 0.1)",
-		height="430px",
-		min_height="430px",
-		overflow="hidden",
-	)
+    """Chart card: header (title left, expand right) | chart body.
+
+    Plotly titles are intentionally removed — the card header is the
+    single source of truth for the chart name, preventing overlap with
+    legends or annotations.
+    """
+    chart_el = rx.cond(
+        on_hover is None,
+        rx.plotly(data=figure, width="100%", height="100%"),
+        rx.plotly(data=figure, on_hover=on_hover, width="100%", height="100%"),
+    )
+    return rx.box(
+        rx.vstack(
+            # ── header ──
+            rx.hstack(
+                rx.text(
+                    title, font_size="13px", font_weight="600",
+                    color=T1, font_family=FONT, white_space="nowrap",
+                    overflow="hidden", text_overflow="ellipsis",
+                ),
+                rx.spacer(),
+                rx.el.button(
+                    rx.icon("maximize-2", size=14),
+                    on_click=DashboardState.open_chart_modal(chart_id),
+                    title="Expand chart",
+                    background="transparent",
+                    color=T4,
+                    border="none",
+                    border_radius=R_SM,
+                    padding="4px",
+                    cursor="pointer",
+                    display="inline-flex",
+                    align_items="center",
+                    justify_content="center",
+                    transition=EASE,
+                    _hover={"color": CYAN, "background": "rgba(62,231,224,0.08)"},
+                ),
+                align="center",
+                width="100%",
+                padding_bottom=SP8,
+                border_bottom=f"1px solid {BORDER_SUBTLE}",
+            ),
+            # ── chart body ──
+            rx.box(chart_el, width="100%", flex="1", min_height="0"),
+            spacing="2",
+            align="stretch",
+            height="100%",
+        ),
+        background=BG_CARD,
+        border=f"1px solid {BORDER}",
+        border_radius=R_LG,
+        padding="12px",
+        transition=EASE,
+        _hover={"border_color": "rgba(62,231,224,0.20)"},
+        height="380px",
+        min_height="380px",
+        overflow="hidden",
+    )
 
 
-def expanded_chart_modal() -> rx.Component:
-	"""Render full-screen expanded chart overlay for detailed inspection."""
-	return rx.cond(
-		DashboardState.expanded_chart_id != "",
-		rx.box(
-			rx.box(
-				rx.vstack(
-					rx.hstack(
-						rx.text(_expanded_chart_title(), font_size="18px", font_weight="700", color=FROST_WHITE),
-						rx.button(
-							"Close",
-							on_click=DashboardState.close_chart_modal,
-							background="rgba(255, 90, 95, 0.18)",
-							color="#FFD9DA",
-							border="1px solid #FF5A5F",
-							border_radius="10px",
-							padding="0.45rem 0.75rem",
-						),
-						justify="between",
-						width="100%",
-						align="center",
-					),
-					rx.text(_expanded_chart_description(), color=SLATE_GREY, font_size="13px"),
-					rx.box(
-						_expanded_chart_component(),
-						height="68vh",
-						width="100%",
-					),
-					rx.box(
-						rx.text("Additional Insights", color=ELECTRIC_CYAN, font_weight="600", font_size="13px"),
-						rx.text(_expanded_chart_insight(), color="#D7E4F7", font_size="13px"),
-						background="#111A2A",
-						border="1px solid #2A3650",
-						border_radius="12px",
-						padding="0.85rem",
-						width="100%",
-					),
-					spacing="3",
-					align="stretch",
-				),
-				background="#0B1221",
-				border="1px solid #2A3650",
-				border_radius="14px",
-				padding="1rem",
-				width="min(1200px, 92vw)",
-				height="90vh",
-				box_shadow="0 26px 60px rgba(0, 0, 0, 0.48)",
-			),
-			position="fixed",
-			inset="0",
-			display="flex",
-			align_items="center",
-			justify_content="center",
-			background="rgba(6, 10, 18, 0.74)",
-			z_index="60",
-			transition="opacity 220ms ease-in-out",
-		),
-		rx.box(),
-	)
+# ═══════════════════════════════════════════════════════════════
+# 4. Risk Action List — compact table rows, scrollable
+# ═══════════════════════════════════════════════════════════════
+
+_RISK_SCROLL = {
+    "&::-webkit-scrollbar": {"width": "4px"},
+    "&::-webkit-scrollbar-track": {"background": "transparent"},
+    "&::-webkit-scrollbar-thumb": {"background": "rgba(62,231,224,0.20)", "border_radius": "8px"},
+    "scrollbar-width": "thin",
+    "scrollbar-color": "rgba(62,231,224,0.20) transparent",
+}
 
 
-def _expanded_chart_title() -> rx.Var:
-	return rx.cond(
-		DashboardState.expanded_chart_id == "sector_treemap",
-		"Sector-Wise Spend Composition",
-		rx.cond(
-			DashboardState.expanded_chart_id == "root_cause_variance",
-			"Root Cause Variance Breakdown",
-			rx.cond(
-				DashboardState.expanded_chart_id == "trend_and_seasonality",
-				"Trend and Seasonality",
-				rx.cond(
-					DashboardState.expanded_chart_id == "risk_heatmap",
-					"Risk Heatmap",
-					"Aging Risk Histogram",
-				),
-			),
-		),
-	)
+def risk_action_list() -> rx.Component:
+    """Scrollable risk action table with fixed header and column labels."""
+    return rx.vstack(
+        # header
+        rx.hstack(
+            rx.hstack(
+                rx.icon("shield-alert", size=15, color=CYAN),
+                rx.text(
+                    "Risk Owner Actions", font_size="13px",
+                    font_weight="600", color=T1, font_family=FONT,
+                ),
+                spacing="2", align="center",
+            ),
+            rx.spacer(),
+            rx.el.span(
+                DashboardState.open_risks.length().to(str),
+                style={
+                    "font-size": "11px", "font-weight": "600",
+                    "color": CYAN, "background": "rgba(62,231,224,0.10)",
+                    "padding": "2px 8px", "border-radius": R_PILL,
+                    "font-family": FONT,
+                },
+            ),
+            align="center",
+            width="100%",
+            padding_bottom=SP8,
+        ),
+        # column labels
+        rx.hstack(
+            rx.text("Risk", font_size="10px", color=T4, width="28%",
+                    text_transform="uppercase", letter_spacing="0.06em", font_family=FONT),
+            rx.text("Owner", font_size="10px", color=T4, width="20%",
+                    text_transform="uppercase", letter_spacing="0.06em", font_family=FONT),
+            rx.text("Status", font_size="10px", color=T4, width="18%",
+                    text_transform="uppercase", letter_spacing="0.06em", font_family=FONT),
+            rx.text("Age", font_size="10px", color=T4, width="14%",
+                    text_transform="uppercase", letter_spacing="0.06em", font_family=FONT),
+            rx.text("Action", font_size="10px", color=T4, width="20%",
+                    text_transform="uppercase", letter_spacing="0.06em", font_family=FONT,
+                    text_align="right"),
+            width="100%",
+            padding="0 4px",
+        ),
+        rx.box(width="100%", height="1px", background=BORDER_SUBTLE),
+        # scrollable rows
+        rx.box(
+            rx.foreach(DashboardState.open_risks, _risk_row),
+            width="100%",
+            display="flex",
+            flex_direction="column",
+            gap=SP4,
+            overflow_y="auto",
+            max_height="320px",
+            padding_right="2px",
+            **_RISK_SCROLL,
+        ),
+        # container
+        width="100%",
+        spacing="1",
+        padding="12px",
+        border_radius=R_LG,
+        background=BG_CARD,
+        border=f"1px solid {BORDER}",
+    )
 
 
-def _expanded_chart_description() -> rx.Var:
-	return rx.cond(
-		DashboardState.expanded_chart_id == "sector_treemap",
-		"Shows sector-level spend concentration and share proportions with full legend visibility.",
-		rx.cond(
-			DashboardState.expanded_chart_id == "root_cause_variance",
-			"Displays grouped variance drivers with complete axis context for root-cause interpretation.",
-			rx.cond(
-				DashboardState.expanded_chart_id == "trend_and_seasonality",
-				"Shows monthly spend trend, cumulative variance, and predictive marker line in full scale.",
-				rx.cond(
-					DashboardState.expanded_chart_id == "risk_heatmap",
-					"Displays full 5x5 severity matrix with non-overlapping legend and complete labels.",
-					"Shows unresolved risk age distribution with full bins and axis labels.",
-				),
-			),
-		),
-	)
+def _risk_row(risk: dict) -> rx.Component:
+    """Single compact risk row: id+desc | owner | status badge | age | action btn."""
+    return rx.hstack(
+        # risk id + truncated description
+        rx.vstack(
+            rx.text(
+                risk["risk_id"], font_size="12px", font_weight="600",
+                color=T1, font_family=FONT, white_space="nowrap",
+            ),
+            rx.text(
+                risk["risk_description"], font_size="11px", color=T3,
+                font_family=FONT, white_space="nowrap",
+                overflow="hidden", text_overflow="ellipsis",
+                max_width="100%",
+            ),
+            spacing="0",
+            width="28%",
+            min_width="0",
+        ),
+        # owner
+        rx.text(
+            risk["risk_owner"], font_size="12px", color=T2,
+            font_family=FONT, width="20%", white_space="nowrap",
+            overflow="hidden", text_overflow="ellipsis",
+        ),
+        # status badge
+        rx.el.span(
+            risk["risk_status"],
+            style={
+                "font-size": "10px",
+                "font-weight": "600",
+                "padding": "2px 8px",
+                "border-radius": R_PILL,
+                "white-space": "nowrap",
+                "font-family": FONT,
+            },
+            color=_status_color(risk["risk_status"]),
+            background=_status_bg(risk["risk_status"]),
+            width="18%",
+        ),
+        # days open
+        rx.hstack(
+            rx.text(
+                risk["days_open"], font_size="12px",
+                color=_age_color(risk["days_open"]),
+                font_weight="600", font_family=FONT,
+            ),
+            rx.text("d", font_size="10px", color=T4, font_family=FONT),
+            spacing="0",
+            align="baseline",
+            width="14%",
+        ),
+        # action button
+        rx.box(
+            rx.el.button(
+                "Review",
+                on_click=DashboardState.email_risk_owner(risk["risk_id"]),
+                background="transparent",
+                color=CYAN,
+                border=f"1px solid rgba(62,231,224,0.25)",
+                border_radius=R_SM,
+                padding="3px 10px",
+                font_size="11px",
+                font_weight="600",
+                font_family=FONT,
+                cursor="pointer",
+                transition=EASE,
+                _hover={
+                    "background": "rgba(62,231,224,0.08)",
+                    "border_color": CYAN,
+                },
+            ),
+            width="20%",
+            text_align="right",
+        ),
+        align="center",
+        width="100%",
+        padding="6px 4px",
+        border_radius=R_SM,
+        transition=EASE,
+        _hover={"background": "rgba(62,231,224,0.03)"},
+    )
 
 
-def _expanded_chart_insight() -> rx.Var:
-	return rx.cond(
-		DashboardState.expanded_chart_id == "root_cause_variance",
-		DashboardState.variance_explanation,
-		rx.cond(
-			DashboardState.expanded_chart_id == "trend_and_seasonality",
-			"Review the predictive marker trajectory to compare recent direction against monthly volatility.",
-			"Use full-scale legend and labels here to validate category concentration and outliers before action.",
-		),
-	)
+def _status_color(status) -> rx.Var:
+    return rx.cond(
+        status == "Critical", RED,
+        rx.cond(status == "High", AMBER,
+                rx.cond(status == "Open", BLUE, T3)))
 
 
-def _expanded_chart_component() -> rx.Component:
-	return rx.cond(
-		DashboardState.expanded_chart_id == "sector_treemap",
-		rx.plotly(data=DashboardState.sector_treemap_figure, width="100%", height="100%"),
-		rx.cond(
-			DashboardState.expanded_chart_id == "root_cause_variance",
-			rx.plotly(data=DashboardState.root_cause_variance_figure, width="100%", height="100%"),
-			rx.cond(
-				DashboardState.expanded_chart_id == "trend_and_seasonality",
-				rx.plotly(data=DashboardState.trend_and_seasonality_figure, width="100%", height="100%"),
-				rx.cond(
-					DashboardState.expanded_chart_id == "risk_heatmap",
-					rx.plotly(data=DashboardState.risk_heatmap_figure, width="100%", height="100%"),
-					rx.plotly(data=DashboardState.aging_risk_histogram_figure, width="100%", height="100%"),
-				),
-			),
-		),
-	)
+def _status_bg(status) -> rx.Var:
+    return rx.cond(
+        status == "Critical", "rgba(255,90,95,0.12)",
+        rx.cond(status == "High", "rgba(255,192,67,0.12)",
+                rx.cond(status == "Open", "rgba(76,141,255,0.12)",
+                        "rgba(138,147,166,0.08)")))
 
 
-def _filter_control(label: str, options, value, on_change) -> rx.Component:
-	return rx.vstack(
-		rx.text(
-			label,
-			font_size="12px",
-			weight="bold",
-			color=SLATE_GREY,
-			font_family="Inter, SF Pro, Poppins, sans-serif",
-		),
-		rx.select(
-			options,
-			value=value,
-			on_change=on_change,
-			width="100%",
-			border_radius="12px",
-			background="#111A2A",
-			border="1px solid #2A3650",
-			color=FROST_WHITE,
-			height="34px",
-		),
-		spacing="1",
-		align="stretch",
-		width="100%",
-	)
+def _age_color(days) -> rx.Var:
+    return rx.cond(
+        days.to(int) > 60, RED,
+        rx.cond(days.to(int) > 30, AMBER, T2))
+
+
+# ═══════════════════════════════════════════════════════════════
+# 5. Predictive Insight Card
+# ═══════════════════════════════════════════════════════════════
+
+
+def predictive_insight_card() -> rx.Component:
+    """AI insight card — compact inline."""
+    return rx.hstack(
+        rx.el.span(
+            "AI",
+            style={
+                "font-size": "10px", "font-weight": "700",
+                "color": CYAN, "background": "rgba(62,231,224,0.14)",
+                "border": f"1px solid rgba(62,231,224,0.35)",
+                "border-radius": R_SM, "padding": "2px 6px",
+                "font-family": FONT,
+            },
+        ),
+        rx.vstack(
+            rx.text("Claude Variance Insight", font_size="12px",
+                    font_weight="600", color=T1, font_family=FONT),
+            rx.text(
+                DashboardState.variance_explanation,
+                white_space="pre-wrap", color=T2, size="2",
+                font_family=FONT, line_height="1.5",
+            ),
+            spacing="1", align="stretch", flex="1", min_width="0",
+        ),
+        spacing="3",
+        align="start",
+        padding="8px 12px",
+        border_radius=R_MD,
+        background=BG_INPUT,
+        border=f"1px solid rgba(62,231,224,0.18)",
+        width="100%",
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# 6. Mode Tabs
+# ═══════════════════════════════════════════════════════════════
+
+
+def analytics_mode_tabs() -> rx.Component:
+    return rx.hstack(
+        _mode_tab("Overview", "overview"),
+        _mode_tab("Spend", "spend"),
+        _mode_tab("Risk", "risk"),
+        _mode_tab("Forecast", "forecast"),
+        spacing="1",
+        width="100%",
+    )
 
 
 def _mode_tab(label: str, mode: str) -> rx.Component:
-	is_active = DashboardState.active_mode == mode
-	return rx.button(
-		label,
-		on_click=DashboardState.set_active_mode(mode),
-		padding="0.45rem 0.85rem",
-		border_radius="999px",
-		font_size="12px",
-		font_weight="600",
-		font_family="Inter, SF Pro, Poppins, sans-serif",
-		background=rx.cond(is_active, "rgba(62, 231, 224, 0.18)", "rgba(138, 147, 166, 0.14)"),
-		color=rx.cond(is_active, ELECTRIC_CYAN, FROST_WHITE),
-		border=rx.cond(is_active, f"1px solid {ELECTRIC_CYAN}", "1px solid #2A354A"),
-		transition="all 180ms ease",
-		_hover={"transform": "translateY(-1px)", "border_color": ELECTRIC_CYAN},
-	)
+    active = DashboardState.active_mode == mode
+    return rx.el.button(
+        label,
+        on_click=DashboardState.set_active_mode(mode),
+        background=rx.cond(active, "rgba(62,231,224,0.14)", "transparent"),
+        color=rx.cond(active, CYAN, T3),
+        border=rx.cond(active, f"1px solid {CYAN}", "1px solid transparent"),
+        border_radius=R_PILL,
+        padding="4px 12px",
+        font_size="12px",
+        font_weight="600",
+        font_family=FONT,
+        cursor="pointer",
+        transition=EASE,
+        _hover={"color": CYAN, "border_color": "rgba(62,231,224,0.30)"},
+    )
 
 
-def _time_range_pill(label: str, value: str) -> rx.Component:
-	is_active = DashboardState.selected_time_range == value
-	return rx.button(
-		label,
-		on_click=DashboardState.set_time_range(value),
-		padding="0.4rem 0.8rem",
-		border_radius="999px",
-		font_size="12px",
-		font_weight="600",
-		white_space="nowrap",
-		font_family="Inter, SF Pro, Poppins, sans-serif",
-		background=rx.cond(is_active, "rgba(62, 231, 224, 0.2)", "transparent"),
-		color=rx.cond(is_active, ELECTRIC_CYAN, FROST_WHITE),
-		border=rx.cond(is_active, "1px solid #3EE7E0", "1px solid transparent"),
-		transition="all 220ms ease-in-out",
-		_hover={
-			"border_color": "#3EE7E0",
-			"box_shadow": "0 0 18px rgba(62, 231, 224, 0.24)",
-		},
-	)
+# ═══════════════════════════════════════════════════════════════
+# 7. Expanded Chart Modal
+# ═══════════════════════════════════════════════════════════════
+
+
+def expanded_chart_modal() -> rx.Component:
+    """Full-screen chart overlay for detailed inspection."""
+    return rx.cond(
+        DashboardState.expanded_chart_id != "",
+        rx.box(
+            rx.box(
+                rx.vstack(
+                    rx.hstack(
+                        rx.text(
+                            _expanded_chart_title(),
+                            font_size="16px", font_weight="700",
+                            color=T1, font_family=FONT,
+                        ),
+                        rx.spacer(),
+                        rx.el.button(
+                            rx.icon("x", size=16),
+                            on_click=DashboardState.close_chart_modal,
+                            title="Close",
+                            background="transparent",
+                            color=T3,
+                            border="none",
+                            cursor="pointer",
+                            border_radius=R_SM,
+                            padding="4px",
+                            transition=EASE,
+                            _hover={"color": RED},
+                        ),
+                        align="center",
+                        width="100%",
+                    ),
+                    rx.text(
+                        _expanded_chart_description(),
+                        color=T3, font_size="12px", font_family=FONT,
+                    ),
+                    rx.box(
+                        _expanded_chart_component(),
+                        height="64vh",
+                        width="100%",
+                    ),
+                    rx.hstack(
+                        rx.el.span(
+                            "AI",
+                            style={
+                                "font-size": "10px", "font-weight": "700",
+                                "color": CYAN, "background": "rgba(62,231,224,0.14)",
+                                "border": f"1px solid rgba(62,231,224,0.35)",
+                                "border-radius": R_SM, "padding": "2px 6px",
+                                "font-family": FONT,
+                            },
+                        ),
+                        rx.text(
+                            _expanded_chart_insight(),
+                            color=T2, font_size="12px", font_family=FONT,
+                        ),
+                        spacing="2",
+                        align="start",
+                        background=BG_INPUT,
+                        border=f"1px solid {BORDER}",
+                        border_radius=R_MD,
+                        padding="8px 12px",
+                        width="100%",
+                    ),
+                    spacing="3",
+                    align="stretch",
+                ),
+                background=BG,
+                border=f"1px solid {BORDER}",
+                border_radius=R_LG,
+                padding="16px",
+                width="min(1200px, 92vw)",
+                height="90vh",
+                box_shadow="0 24px 64px rgba(0,0,0,0.55)",
+            ),
+            position="fixed",
+            inset="0",
+            display="flex",
+            align_items="center",
+            justify_content="center",
+            background="rgba(6,10,18,0.78)",
+            z_index="60",
+        ),
+        rx.box(),
+    )
+
+
+# ── modal helpers ──
+
+def _expanded_chart_title() -> rx.Var:
+    return rx.cond(
+        DashboardState.expanded_chart_id == "sector_treemap",
+        "Sector-Wise Spend Composition",
+        rx.cond(
+            DashboardState.expanded_chart_id == "root_cause_variance",
+            "Root Cause Variance Breakdown",
+            rx.cond(
+                DashboardState.expanded_chart_id == "trend_and_seasonality",
+                "Trend and Seasonality",
+                rx.cond(
+                    DashboardState.expanded_chart_id == "risk_heatmap",
+                    "Risk Heatmap",
+                    "Aging Risk Histogram",
+                ),
+            ),
+        ),
+    )
+
+
+def _expanded_chart_description() -> rx.Var:
+    return rx.cond(
+        DashboardState.expanded_chart_id == "sector_treemap",
+        "Sector-level spend concentration and share proportions.",
+        rx.cond(
+            DashboardState.expanded_chart_id == "root_cause_variance",
+            "Grouped variance drivers with axis context for root-cause interpretation.",
+            rx.cond(
+                DashboardState.expanded_chart_id == "trend_and_seasonality",
+                "Monthly spend trend, cumulative variance, and predictive markers.",
+                rx.cond(
+                    DashboardState.expanded_chart_id == "risk_heatmap",
+                    "5\u00d75 severity matrix with non-overlapping labels.",
+                    "Unresolved risk age distribution with full bins.",
+                ),
+            ),
+        ),
+    )
+
+
+def _expanded_chart_insight() -> rx.Var:
+    return rx.cond(
+        DashboardState.expanded_chart_id == "root_cause_variance",
+        DashboardState.variance_explanation,
+        rx.cond(
+            DashboardState.expanded_chart_id == "trend_and_seasonality",
+            "Review the predictive marker trajectory against monthly volatility.",
+            "Use full-scale labels to validate concentration and outliers.",
+        ),
+    )
+
+
+def _expanded_chart_component() -> rx.Component:
+    return rx.cond(
+        DashboardState.expanded_chart_id == "sector_treemap",
+        rx.plotly(data=DashboardState.sector_treemap_figure, width="100%", height="100%"),
+        rx.cond(
+            DashboardState.expanded_chart_id == "root_cause_variance",
+            rx.plotly(data=DashboardState.root_cause_variance_figure, width="100%", height="100%"),
+            rx.cond(
+                DashboardState.expanded_chart_id == "trend_and_seasonality",
+                rx.plotly(data=DashboardState.trend_and_seasonality_figure, width="100%", height="100%"),
+                rx.cond(
+                    DashboardState.expanded_chart_id == "risk_heatmap",
+                    rx.plotly(data=DashboardState.risk_heatmap_figure, width="100%", height="100%"),
+                    rx.plotly(data=DashboardState.aging_risk_histogram_figure, width="100%", height="100%"),
+                ),
+            ),
+        ),
+    )
+
+
+# ═══════════════════════════════════════════════════════════════
+# Legacy aliases (backward compat for any other imports)
+# ═══════════════════════════════════════════════════════════════
+
+# risk_owner_card — keep for tests or other callers
+def risk_owner_card(risk: dict) -> rx.Component:
+    """Legacy single risk card — wraps the compact row."""
+    return _risk_row(risk)

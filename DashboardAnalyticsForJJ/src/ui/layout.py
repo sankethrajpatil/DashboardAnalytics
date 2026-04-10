@@ -13,6 +13,7 @@ from src.ui.components import (
 	expanded_chart_modal,
 	metric_card,
 	predictive_insight_card,
+	risk_action_list,
 	risk_owner_card,
 )
 
@@ -80,9 +81,8 @@ def _dashboard_content() -> rx.Component:
 			analytics_mode_tabs(),
 			dashboard_controls_panel(),
 			_metric_row(),
-			rx.box(width="100%", height="1px", background="#243149"),
 			_mode_sections(),
-			spacing="6",
+			spacing="3",
 			width="100%",
 			align="stretch",
 		),
@@ -90,7 +90,7 @@ def _dashboard_content() -> rx.Component:
 		min_width="0",
 		overflow_y="auto",
 		height="100vh",
-		padding="1.25rem",
+		padding="1rem 1.25rem",
 		background=(
 			"radial-gradient(circle at 10% 10%, rgba(62, 231, 224, 0.12) 0%, transparent 35%),"
 			"radial-gradient(circle at 80% 0%, rgba(166, 107, 255, 0.12) 0%, transparent 28%),"
@@ -223,28 +223,26 @@ def _nav_item(icon_text: str, label: str, mode: str) -> rx.Component:
 
 
 def _title_bar() -> rx.Component:
-	return rx.box(
-		rx.vstack(
-			rx.heading(
-				"Dashboard Analytics — Spend | Risk | Forecast",
-				size="8",
-				color=FROST_WHITE,
-				font_weight="700",
-				font_family="Inter, SF Pro, Poppins, sans-serif",
-			),
-			rx.text(
-				DashboardState.time_range_label,
-				color=SLATE_GREY,
-				font_size="13px",
-				font_family="Inter, SF Pro, Poppins, sans-serif",
-			),
-			rx.box(width="100%", height="3px", background=ELECTRIC_CYAN, border_radius="999px", box_shadow="0 0 16px rgba(62, 231, 224, 0.35)"),
-			spacing="1",
-			align="stretch",
+	return rx.hstack(
+		rx.heading(
+			"Dashboard Analytics",
+			size="5",
+			color=FROST_WHITE,
+			font_weight="700",
+			font_family="Inter, SF Pro, Poppins, sans-serif",
+			white_space="nowrap",
 		),
-		padding_bottom="0.35rem",
-		border_bottom="1px solid #1E2635",
+		rx.text(
+			DashboardState.time_range_label,
+			color=SLATE_GREY,
+			font_size="12px",
+			font_family="Inter, SF Pro, Poppins, sans-serif",
+		),
+		align="baseline",
+		spacing="3",
 		width="100%",
+		padding_bottom="0.2rem",
+		border_bottom=f"1px solid {SOFT_GRAPHITE}",
 	)
 
 
@@ -280,15 +278,15 @@ def _status_strip() -> rx.Component:
 
 
 def _metric_row() -> rx.Component:
-	return rx.hstack(
+	return rx.box(
 		metric_card("Total PO Volume", DashboardState.total_po_volume_display, AZURE_PULSE_BLUE, "PO", "+2.1%"),
-		metric_card("Average Variance", DashboardState.average_variance_display, "#A66BFF", "VAR", "-0.8%"),
-		metric_card("Active Risk Count", DashboardState.active_risk_count_display, ELECTRIC_CYAN, "RISK", "-1.6%"),
-		metric_card("Addressable Spend %", DashboardState.addressable_spend_pct_display, "#4CD964", "ADDR", "+0.9%"),
-		spacing="4",
+		metric_card("Avg Variance", DashboardState.average_variance_display, "#A66BFF", "VAR", "-0.8%"),
+		metric_card("Active Risks", DashboardState.active_risk_count_display, ELECTRIC_CYAN, "RISK", "-1.6%"),
+		metric_card("Addressable %", DashboardState.addressable_spend_pct_display, "#4CD964", "ADDR", "+0.9%"),
+		display="grid",
+		grid_template_columns="repeat(4, 1fr)",
+		gap="12px",
 		width="100%",
-		align="stretch",
-		flex_wrap="wrap",
 	)
 
 
@@ -314,9 +312,10 @@ def _overview_section() -> rx.Component:
 
 def _spend_section() -> rx.Component:
 	return rx.vstack(
-		rx.heading(
-			"Spend & Variance Analytics",
-			size="6",
+		rx.text(
+			"Spend & Variance",
+			font_size="14px",
+			font_weight="600",
 			color=FROST_WHITE,
 			font_family="Inter, SF Pro, Poppins, sans-serif",
 		),
@@ -334,25 +333,26 @@ def _spend_section() -> rx.Component:
 			),
 			chart_card(
 				"trend_and_seasonality",
-				"Trend and Seasonality",
+				"Trend & Seasonality",
 				DashboardState.trend_and_seasonality_figure,
 			),
 			display="grid",
-			grid_template_columns="repeat(auto-fit, minmax(340px, 1fr))",
-			gap="1rem",
+			grid_template_columns="repeat(auto-fit, minmax(320px, 1fr))",
+			gap="12px",
 			width="100%",
 		),
 		predictive_insight_card(),
-		spacing="4",
+		spacing="3",
 		width="100%",
 	)
 
 
 def _risk_section() -> rx.Component:
 	return rx.vstack(
-		rx.heading(
-			"Risk & Governance Analytics",
-			size="6",
+		rx.text(
+			"Risk & Governance",
+			font_size="14px",
+			font_weight="600",
 			color=FROST_WHITE,
 			font_family="Inter, SF Pro, Poppins, sans-serif",
 		),
@@ -368,23 +368,12 @@ def _risk_section() -> rx.Component:
 				DashboardState.aging_risk_histogram_figure,
 			),
 			display="grid",
-			grid_template_columns="repeat(auto-fit, minmax(340px, 1fr))",
-			gap="1rem",
+			grid_template_columns="repeat(auto-fit, minmax(320px, 1fr))",
+			gap="12px",
 			width="100%",
 		),
-		rx.vstack(
-			rx.heading(
-				"Risk Owner Actions",
-				size="5",
-				color=FROST_WHITE,
-				font_family="Inter, SF Pro, Poppins, sans-serif",
-			),
-			rx.foreach(DashboardState.open_risks, risk_owner_card),
-			width="100%",
-			spacing="3",
-			align="stretch",
-		),
-		spacing="4",
+		risk_action_list(),
+		spacing="3",
 		width="100%",
 	)
 

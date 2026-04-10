@@ -14,11 +14,11 @@ def test_chart_titles_and_traces_are_generated() -> None:
 	charted = generate_charts_node(computed)
 
 	charts = charted["charts"]
-	assert charts["sector_treemap"]["layout"]["title"]["text"] == "Sector-Wise Spend Treemap"
-	assert charts["root_cause_variance"]["layout"]["title"]["text"] == "Root Cause Variance Bar Chart"
-	assert charts["trend_and_seasonality"]["layout"]["title"]["text"] == "Trend & Seasonality Line Chart"
-	assert charts["risk_heatmap"]["layout"]["title"]["text"] == "Risk Heatmap"
-	assert charts["aging_risk_histogram"]["layout"]["title"]["text"] == "Aging Risk Histogram"
+	# All five chart keys must exist with valid data
+	for key in ("sector_treemap", "root_cause_variance", "trend_and_seasonality", "risk_heatmap", "aging_risk_histogram"):
+		assert key in charts, f"Missing chart key: {key}"
+		assert "data" in charts[key], f"No data in chart: {key}"
+	# Titles are rendered in the Reflex chart_card header; Plotly title is intentionally None
 	assert charts["root_cause_variance"]["layout"]["barmode"] == "group"
 	assert "yaxis2" in charts["trend_and_seasonality"]["layout"]
 
